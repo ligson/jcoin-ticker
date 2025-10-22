@@ -8,6 +8,10 @@ module.exports = {
         name: 'jcoin-ticker',
         executableName: 'jcoin-ticker',
         icon: 'public/btc.ico', // Windows图标路径
+        // 移除启动动画
+        loadingGif: null,
+        // 或者指定一个透明的GIF文件来隐藏动画
+        // loadingGif: 'public/transparent.gif',
     },
     rebuildConfig: {},
     makers: [
