@@ -8,6 +8,7 @@ on:
 env:
   ACTIONS_RUNNER_DEBUG: true
   ACTIONS_STEP_DEBUG: true
+  GH_TOKEN: ${{ secrets.GH_TOKEN }}  # 添加 GitHub Token
 permissions:
   contents: write
 
@@ -59,6 +60,7 @@ jobs:
         uses: actions/create-release@v2
         env:
           GITHUB_TOKEN: ${{ secrets.github_token }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}  # 添加 GitHub Token
         with:
           tag_name: ${{ github.ref }}
           release_name: Release ${{ github.ref }}
@@ -69,6 +71,7 @@ jobs:
         uses: actions/upload-release-asset@v2
         env:
           GITHUB_TOKEN: ${{ secrets.github_token }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}  # 添加 GitHub Token
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
           asset_path: ./downloaded-artifacts/**/*
