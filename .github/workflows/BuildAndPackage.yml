@@ -2,10 +2,10 @@ name: BuildAndPackage
 
 on:
   push:
-    #tags:
-    #  - '*'
-    branches:
-      - main
+    tags:
+      - '*'
+    #branches:
+    #  - main
 
 env:
   ACTIONS_RUNNER_DEBUG: true
