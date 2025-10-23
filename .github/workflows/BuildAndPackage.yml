@@ -2,8 +2,10 @@ name: BuildAndPackage
 
 on:
   push:
-    tags:
-      - '*'
+    #tags:
+    #  - '*'
+    branches:
+      - main
 
 env:
   ACTIONS_RUNNER_DEBUG: true
@@ -74,7 +76,7 @@ jobs:
 
       - name: Upload Windows assets
         uses: actions/upload-release-asset@v1
-        if: exists('downloaded-artifacts/build-artifacts-windows-latest')
+        if: success()
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
@@ -85,7 +87,7 @@ jobs:
 
       - name: Upload macOS assets
         uses: actions/upload-release-asset@v1
-        if: exists('downloaded-artifacts/build-artifacts-macos-latest')
+        if: success()
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
@@ -96,7 +98,7 @@ jobs:
 
       - name: Upload Linux assets
         uses: actions/upload-release-asset@v1
-        if: exists('downloaded-artifacts/build-artifacts-ubuntu-latest')
+        if: success()
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
