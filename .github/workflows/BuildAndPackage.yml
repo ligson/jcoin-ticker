@@ -35,7 +35,7 @@ jobs:
         run: yarn dist  # 使用 electron-builder 构建
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: build-artifacts-${{ matrix.os }}
           path: release/
@@ -50,13 +50,13 @@ jobs:
         uses: actions/checkout@v1
 
       - name: Download all artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           path: downloaded-artifacts
 
       - name: Create Release
         id: create_release
-        uses: actions/create-release@v1
+        uses: actions/create-release@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
@@ -66,7 +66,7 @@ jobs:
           prerelease: false
 
       - name: Upload release assets
-        uses: actions/upload-release-asset@v1
+        uses: actions/upload-release-asset@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
