@@ -18,7 +18,7 @@
     "artifactName": "${productName}-Mac-${version}-Installer.${ext}"
   },
   "win": {
-    "icon": "build/btc.ico",
+    "icon": "public/btc.ico",
     "target": [
       {
         "target": "nsis",
