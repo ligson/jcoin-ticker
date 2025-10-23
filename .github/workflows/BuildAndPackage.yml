@@ -4,8 +4,6 @@ on:
   push:
     tags:
       - '*'
-    #branches:
-    #  - main
 
 env:
   ACTIONS_RUNNER_DEBUG: true
@@ -14,9 +12,9 @@ permissions:
   contents: write
 
 jobs:
-  release:
+  # 构建作业 - 多系统并行构建
+  build:
     runs-on: ${{ matrix.os }}
-
     strategy:
       matrix:
         os: [ macos-latest, ubuntu-latest, windows-latest ]
@@ -29,19 +27,33 @@ jobs:
         uses: actions/setup-node@v1
         with:
           node-version: v22.21.0
+
       - name: Install dependencies
         run: yarn install && yarn global add electron-builder
-      - name: Build/release Electron app
-        uses: samuelmeuli/action-electron-builder@v1
-        with:
-          # GitHub token, automatically provided to the action
-          # (No need to define this secret in the repo settings)
-          github_token: ${{ secrets.github_token }}
 
-          # If the commit is tagged with a version (e.g. "v1.0.0"),
-          # release the app after building
-          release: ${{ startsWith(github.ref, 'refs/tags/v') }}
-          publish: always  # 总是发布
+      - name: Build Electron app
+        run: yarn dist  # 使用 electron-builder 构建
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: build-artifacts-${{ matrix.os }}
+          path: release/
+
+  # 发布作业 - 依赖构建完成后再执行
+  release:
+    needs: build  # 等待所有构建作业完成
+    runs-on: ubuntu-latest  # 只在单一系统上执行
+
+    steps:
+      - name: Check out Git repository
+        uses: actions/checkout@v1
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v3
+        with:
+          path: downloaded-artifacts
+
       - name: Create Release
         id: create_release
         uses: actions/create-release@v1
@@ -50,5 +62,15 @@ jobs:
         with:
           tag_name: ${{ github.ref }}
           release_name: Release ${{ github.ref }}
-          draft: false  # 确保不是 Draft
+          draft: false
           prerelease: false
+
+      - name: Upload release assets
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./downloaded-artifacts/**/*
+          asset_name: ${{ matrix.os }}-build
+          asset_content_type: application/zip
