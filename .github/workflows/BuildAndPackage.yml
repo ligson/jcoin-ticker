@@ -2,10 +2,10 @@ name: BuildAndPackage
 
 on:
   push:
-    #tags:
-    #  - '*'
-    branches:
-      - main
+    tags:
+      - '*'
+    #branches:
+    #  - main
 
 env:
   ACTIONS_RUNNER_DEBUG: true
@@ -41,3 +41,4 @@ jobs:
           # If the commit is tagged with a version (e.g. "v1.0.0"),
           # release the app after building
           release: ${{ startsWith(github.ref, 'refs/tags/v') }}
+          publish: always  # 总是发布
