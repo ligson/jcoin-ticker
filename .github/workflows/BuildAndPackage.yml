@@ -44,8 +44,8 @@ jobs:
 
   # 发布作业 - 依赖构建完成后再执行
   release:
-    needs: build  # 等待所有构建作业完成
-    runs-on: ubuntu-latest  # 只在单一系统上执行
+    needs: build
+    runs-on: ubuntu-latest
 
     steps:
       - name: Check out Git repository
@@ -56,23 +56,52 @@ jobs:
         with:
           path: downloaded-artifacts
 
+      - name: List downloaded files
+        run: |
+          ls -la downloaded-artifacts/
+          find downloaded-artifacts/ -name "*.AppImage" -o -name "*.dmg" -o -name "*.exe" -o -name "*.deb" -o -name "*.rpm"
+
       - name: Create Release
         id: create_release
-        uses: actions/create-release@latest
+        uses: actions/create-release@v1
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # 使用默认的 GITHUB_TOKEN
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tag_name: ${{ github.ref }}
           release_name: Release ${{ github.ref }}
           draft: false
           prerelease: false
 
-      - name: Upload release assets
-        uses: actions/upload-release-asset@latest
+      - name: Upload Windows assets
+        uses: actions/upload-release-asset@v1
+        if: exists('downloaded-artifacts/build-artifacts-windows-latest')
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # 使用默认的 GITHUB_TOKEN
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./downloaded-artifacts/**/*
-          asset_name: ${{ matrix.os }}-build
-          asset_content_type: application/zip
+          asset_path: downloaded-artifacts/build-artifacts-windows-latest/*.exe
+          asset_name: jcoin-ticker-windows-installer.exe
+          asset_content_type: application/octet-stream
+
+      - name: Upload macOS assets
+        uses: actions/upload-release-asset@v1
+        if: exists('downloaded-artifacts/build-artifacts-macos-latest')
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: downloaded-artifacts/build-artifacts-macos-latest/*.dmg
+          asset_name: jcoin-ticker-macos-installer.dmg
+          asset_content_type: application/octet-stream
+
+      - name: Upload Linux assets
+        uses: actions/upload-release-asset@v1
+        if: exists('downloaded-artifacts/build-artifacts-ubuntu-latest')
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: downloaded-artifacts/build-artifacts-ubuntu-latest/*.AppImage
+          asset_name: jcoin-ticker-linux-installer.AppImage
+          asset_content_type: application/octet-stream
+
