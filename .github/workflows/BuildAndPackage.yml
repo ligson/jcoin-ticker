@@ -29,8 +29,9 @@ jobs:
         uses: actions/setup-node@v1
         with:
           node-version: v22.21.0
-      - name: 安装electron-builder
-        run: yarn global add electron-builder
+      - name: Install dependencies
+        run: |  yarn install
+          yarn global add electron-builder
       - name: Build/release Electron app
         uses: samuelmeuli/action-electron-builder@v1
         with:
