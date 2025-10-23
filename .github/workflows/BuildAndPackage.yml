@@ -58,7 +58,7 @@ jobs:
 
       - name: Create Release
         id: create_release
-        uses: actions/create-release@v2
+        uses: actions/create-release@latest
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # 使用默认的 GITHUB_TOKEN
         with:
@@ -68,7 +68,7 @@ jobs:
           prerelease: false
 
       - name: Upload release assets
-        uses: actions/upload-release-asset@v2
+        uses: actions/upload-release-asset@latest
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # 使用默认的 GITHUB_TOKEN
         with:
