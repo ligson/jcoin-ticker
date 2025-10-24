@@ -1,3 +1,6 @@
+# --------------------------------------------------------
+# 优化后的 Electron 多平台构建与发布工作流
+# --------------------------------------------------------
 name: BuildAndPackage
 
 on:
@@ -10,8 +13,9 @@ on:
 env:
   ACTIONS_RUNNER_DEBUG: true
   ACTIONS_STEP_DEBUG: true
+
 permissions:
-  contents: write
+  contents: write # 授予写入权限用于创建 Release 和上传 Assets
 
 jobs:
   # 构建作业 - 多系统并行构建
@@ -22,25 +26,27 @@ jobs:
         os: [ macos-latest, ubuntu-latest, windows-latest ]
 
     steps:
-      - name: Check out Git repository
-        uses: actions/checkout@v1
+      - name: Checkout Git repository
+        uses: actions/checkout@v4 # 推荐使用 v4
 
       - name: Install Node.js, NPM and Yarn
-        uses: actions/setup-node@v1
+        uses: actions/setup-node@v4 # 推荐使用 v4
         with:
-          node-version: v22.21.0
+          node-version: 20 # 推荐使用 LTS 版本，例如 20
 
       - name: Install dependencies
-        run: yarn install && yarn global add electron-builder
+        # 移除 yarn global add electron-builder，使用项目本地依赖
+        run: yarn install
 
       - name: Build Electron app
         run: yarn build  # 使用 electron-builder 构建
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # 明确传递默认 Token
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
+          # 这里的名称是正确的，它定义了下载后的子文件夹名
           name: build-artifacts-${{ matrix.os }}
           path: release/
 
@@ -50,18 +56,17 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Check out Git repository
-        uses: actions/checkout@v1
+      - name: Checkout Git repository
+        uses: actions/checkout@v4
 
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
           path: downloaded-artifacts
 
-      - name: List downloaded files
+      - name: List downloaded files (Debug)
         run: |
-          ls -la downloaded-artifacts/
-          find downloaded-artifacts/ -name "*.AppImage" -o -name "*.dmg" -o -name "*.exe" -o -name "*.deb" -o -name "*.rpm"
+          ls -R downloaded-artifacts/ # 使用 -R 递归显示文件结构
 
       - name: Create Release
         id: create_release
@@ -74,36 +79,76 @@ jobs:
           draft: false
           prerelease: false
 
+      # ----------------------------------------------------
+      # ⚠️ 关键修正 1：查找 Windows .exe 文件的精确路径
+      # ----------------------------------------------------
+      - name: Find Windows Asset Path
+        id: find_win_asset
+        run: |
+          # find 命令查找 .exe 文件，并将其路径存入环境变量
+          EXE_PATH=$(find downloaded-artifacts/build-artifacts-windows-latest -name "*.exe" | head -n 1)
+          if [ -z "$EXE_PATH" ]; then
+            echo "::error::Could not find Windows .exe file in expected path."
+            exit 1
+          fi
+          echo "windows_path=$EXE_PATH" >> $GITHUB_OUTPUT
+
       - name: Upload Windows assets
         uses: actions/upload-release-asset@v1
-        if: success()
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: downloaded-artifacts/build-artifacts-windows-latest/*.exe
+          # 使用上一步找到的精确路径
+          asset_path: ${{ steps.find_win_asset.outputs.windows_path }}
           asset_name: jcoin-ticker-windows-installer.exe
           asset_content_type: application/octet-stream
 
+      # ----------------------------------------------------
+      # ⚠️ 关键修正 2：查找 macOS .dmg 文件的精确路径
+      # ----------------------------------------------------
+      - name: Find macOS Asset Path
+        id: find_mac_asset
+        run: |
+          DMG_PATH=$(find downloaded-artifacts/build-artifacts-macos-latest -name "*.dmg" | head -n 1)
+          if [ -z "$DMG_PATH" ]; then
+            echo "::warning::Could not find macOS .dmg file in expected path. Skipping upload."
+            # 不退出，允许流程继续
+            exit 0
+          fi
+          echo "macos_path=$DMG_PATH" >> $GITHUB_OUTPUT
+
       - name: Upload macOS assets
         uses: actions/upload-release-asset@v1
-        if: success()
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: downloaded-artifacts/build-artifacts-macos-latest/*.dmg
+          # 使用上一步找到的精确路径
+          asset_path: ${{ steps.find_mac_asset.outputs.macos_path }}
           asset_name: jcoin-ticker-macos-installer.dmg
           asset_content_type: application/octet-stream
 
+      # ----------------------------------------------------
+      # ⚠️ 关键修正 3：查找 Linux .AppImage 文件的精确路径
+      # ----------------------------------------------------
+      - name: Find Linux Asset Path
+        id: find_linux_asset
+        run: |
+          APPIMAGE_PATH=$(find downloaded-artifacts/build-artifacts-ubuntu-latest -name "*.AppImage" | head -n 1)
+          if [ -z "$APPIMAGE_PATH" ]; then
+            echo "::warning::Could not find Linux .AppImage file in expected path. Skipping upload."
+            exit 0
+          fi
+          echo "linux_path=$APPIMAGE_PATH" >> $GITHUB_OUTPUT
+
       - name: Upload Linux assets
         uses: actions/upload-release-asset@v1
-        if: success()
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: downloaded-artifacts/build-artifacts-ubuntu-latest/*.AppImage
+          # 使用上一步找到的精确路径
+          asset_path: ${{ steps.find_linux_asset.outputs.linux_path }}
           asset_name: jcoin-ticker-linux-installer.AppImage
           asset_content_type: application/octet-stream
-
