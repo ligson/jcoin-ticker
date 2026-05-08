@@ -18,6 +18,16 @@ const routes = [
                 component: () => import("../components/setting/pages/tickercoin/TickerCoinPage.vue")
             },
             {
+                path: 'proxy',
+                name: 'proxy',
+                component: () => import("../components/setting/pages/proxy/ProxySettingPage.vue")
+            },
+            {
+                path: 'data-source',
+                name: 'data-source',
+                component: () => import("../components/setting/pages/datasource/DataSourceSettingPage.vue")
+            },
+            {
                 path: 'about',
                 name: 'about',
                 component: () => import("../components/setting/pages/about/AboutPage.vue")

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import {h, ref} from "vue";
 import {useRouter} from "vue-router";
-import {DollarCircleOutlined} from "@ant-design/icons-vue";
+import {ApiOutlined, DollarCircleOutlined, GlobalOutlined, InfoCircleOutlined} from "@ant-design/icons-vue";
 import {MenuProps} from "ant-design-vue";
 
 const activeKey = ref<string[]>(["ticker-coin"]);
@@ -14,9 +14,19 @@ const menuOptions = ref<MenuProps['items']>([
     icon: h(DollarCircleOutlined),
   },
   {
+    label: '代理设置',
+    key: 'proxy',
+    icon: h(GlobalOutlined),
+  },
+  {
+    label: '数据源',
+    key: 'data-source',
+    icon: h(ApiOutlined),
+  },
+  {
     label: '关于',
     key: 'about',
-    icon: h(DollarCircleOutlined),
+    icon: h(InfoCircleOutlined),
   }
 ])
 const router = useRouter()

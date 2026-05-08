@@ -1,67 +1,8 @@
 <script setup lang="ts">
-import {getCurrentInstance, onMounted, ref} from "vue";
-import BinanceWebSocket, {CoinPrice} from "./BinanceWebSocket.ts";
+import {ref} from "vue";
+import {runtimeCoinPrices} from "./spotTickerRuntime.ts";
 
-
-const coins = ref(["BTC", "ETH", "CRV", "S"])
-const coinPrices = ref<CoinPrice[]>([])
-const instance = getCurrentInstance();
-const $message = instance?.appContext.config.globalProperties.$message;
-const $store = instance?.appContext.config.globalProperties.$store;
-const loadingCoinInfo = () => {
-  const binanceWebSocket = new BinanceWebSocket(coins.value)
-  binanceWebSocket.setMessageCallback((coinPrice: CoinPrice) => {
-    const existingIndex = coinPrices.value.findIndex(item => item.coin === coinPrice.coin);
-    if (existingIndex >= 0) {
-      // 如果已存在该coin，更新价格
-      coinPrices.value[existingIndex].price = coinPrice.price;
-      coinPrices.value[existingIndex].open = coinPrice.open;
-      coinPrices.value[existingIndex].high = coinPrice.high;
-      coinPrices.value[existingIndex].low = coinPrice.low;
-      coinPrices.value[existingIndex].priceChangePercentage = coinPrice.priceChangePercentage;
-      coinPrices.value[existingIndex].volume = coinPrice.volume;
-      coinPrices.value[existingIndex].volumeInUSDT = coinPrice.volumeInUSDT;
-      //$message.success(`${coinPrice.coin}价格已更新`)
-    } else {
-      // 按照coins数组中的顺序插入
-      const coinIndex = coins.value.indexOf(coinPrice.coin);
-      if (coinIndex >= 0) {
-        // 根据在coins中的位置确定插入点
-        let insertPosition = 0;
-        for (let i = 0; i < coinIndex; i++) {
-          if (coinPrices.value.some(item => item.coin === coins.value[i])) {
-            insertPosition++;
-          }
-        }
-        coinPrices.value.splice(insertPosition, 0, coinPrice);
-      }
-    }
-  })
-}
-const loadSettings = () => {
-
-  $store.get("appConfig").then((value: any) => {
-    if (value) {
-      coins.value = value.coins
-      coinPrices.value = []
-      value.coins.forEach((coin: string) => {
-        coinPrices.value.push({
-          coin: coin,
-          price: "0.00",
-          open: "0.00",
-          high: "0.00",
-          low: "0.00",
-          priceChangePercentage: "0.00",
-          volume: "0.00",
-          volumeInUSDT: "0.00"
-        })
-      })
-      loadingCoinInfo()
-    }
-  }).catch((e: Error) => {
-    $message.error(e.message)
-  })
-}
+const coinPrices = runtimeCoinPrices
 
 // 定义颜色数组
 const avatarColors = ref([
@@ -81,15 +22,12 @@ const getAvatarColor = (coin: string) => {
   return avatarColors.value[index];
 };
 
-onMounted(() => {
-  loadSettings()
-})
 </script>
 
 <template>
   <a-list item-layout="horizontal" :data-source="coinPrices">
     <template #renderItem="{ item }">
-      <a-list-item>
+      <a-list-item :key="item.coin">
         <a-list-item-meta>
           <template #description>
             <template v-if="item.priceChangePercentage>0">
