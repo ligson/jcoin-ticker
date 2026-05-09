@@ -64,8 +64,11 @@ jobs:
           export NPM_CONFIG_ELECTRON_MIRROR=""
           export npm_config_electron_mirror=""
           export npm_package_config_electron_mirror=""
+          export NPM_CONFIG_ELECTRON_BUILDER_BINARIES_MIRROR="https://github.com/electron-userland/electron-builder-binaries/releases/download/"
+          export npm_config_electron_builder_binaries_mirror="https://github.com/electron-userland/electron-builder-binaries/releases/download/"
+          export npm_package_config_electron_builder_binaries_mirror="https://github.com/electron-userland/electron-builder-binaries/releases/download/"
           echo "pnpm electron_mirror: $(pnpm config get electron_mirror)"
-          node -e "console.log(JSON.stringify({ NPM_CONFIG_ELECTRON_MIRROR: process.env.NPM_CONFIG_ELECTRON_MIRROR ?? null, npm_config_electron_mirror: process.env.npm_config_electron_mirror ?? null, npm_package_config_electron_mirror: process.env.npm_package_config_electron_mirror ?? null, NPM_CONFIG_ELECTRON_BUILDER_BINARIES_MIRROR: process.env.NPM_CONFIG_ELECTRON_BUILDER_BINARIES_MIRROR ?? null, ELECTRON_BUILDER_BINARIES_MIRROR: process.env.ELECTRON_BUILDER_BINARIES_MIRROR ?? null }, null, 2))"
+          node -e "console.log(JSON.stringify({ NPM_CONFIG_ELECTRON_MIRROR: process.env.NPM_CONFIG_ELECTRON_MIRROR ?? null, npm_config_electron_mirror: process.env.npm_config_electron_mirror ?? null, npm_package_config_electron_mirror: process.env.npm_package_config_electron_mirror ?? null, NPM_CONFIG_ELECTRON_BUILDER_BINARIES_MIRROR: process.env.NPM_CONFIG_ELECTRON_BUILDER_BINARIES_MIRROR ?? null, npm_config_electron_builder_binaries_mirror: process.env.npm_config_electron_builder_binaries_mirror ?? null, npm_package_config_electron_builder_binaries_mirror: process.env.npm_package_config_electron_builder_binaries_mirror ?? null, ELECTRON_BUILDER_BINARIES_MIRROR: process.env.ELECTRON_BUILDER_BINARIES_MIRROR ?? null }, null, 2))"
 
       - name: Build Electron app
         env:
@@ -75,6 +78,9 @@ jobs:
           export NPM_CONFIG_ELECTRON_MIRROR=""
           export npm_config_electron_mirror=""
           export npm_package_config_electron_mirror=""
+          export NPM_CONFIG_ELECTRON_BUILDER_BINARIES_MIRROR="https://github.com/electron-userland/electron-builder-binaries/releases/download/"
+          export npm_config_electron_builder_binaries_mirror="https://github.com/electron-userland/electron-builder-binaries/releases/download/"
+          export npm_package_config_electron_builder_binaries_mirror="https://github.com/electron-userland/electron-builder-binaries/releases/download/"
           pnpm build
 
       - name: Upload artifacts

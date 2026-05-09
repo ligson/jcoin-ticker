@@ -17,6 +17,15 @@
 
 - 暂无
 
+## [0.0.26] - 2026-05-09
+
+### 变更
+
+- 将 `package.json` 版本号提升到 `0.0.26`，用于重新触发 GitHub Actions 并修复 mac 打包阶段 `dmg-builder` 仍落回 `npmmirror` 的问题。
+- 将 `electron-builder` 从 `26.8.1` 升级到 `26.9.0`，引入上游对 `electron_builder_binaries_mirror` 的修复，避免 `downloadArtifact` 阶段忽略镜像覆盖配置。
+- 同步更新 `pnpm-lock.yaml`，确保 GitHub Actions 的 `--frozen-lockfile` 构建实际安装到带修复的 `electron-builder` 版本。
+- 在 GitHub Actions 的构建 shell 中显式导出 `electron_builder_binaries_mirror` 相关环境变量到 GitHub 官方地址，并继续清空 `electron_mirror` 相关变量，避免 mac DMG 阶段再次命中 `cdn.npmmirror.com` 的错误下载地址。
+
 ## [0.0.25] - 2026-05-09
 
 ### 变更
