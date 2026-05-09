@@ -17,6 +17,15 @@
 
 - 暂无
 
+## [0.0.27] - 2026-05-10
+
+### 变更
+
+- 将 `package.json` 版本号提升到 `0.0.27`，用于重新触发 GitHub Actions 并修复 Ubuntu 构建阶段 `pnpm install --frozen-lockfile` 的失败。
+- 修复 `pnpm-lock.yaml` 中 `@electron/node-gyp` 被错误写成 SSH git 仓库地址的问题，避免 GitHub Actions 在无私钥环境下执行 `git clone git@github.com:electron/node-gyp.git` 并报 `Permission denied (publickey)`。
+- 将 `@electron/node-gyp` 的锁文件来源恢复为 `https://codeload.github.com/...tar.gz` 直链形式，避免 CI 再走 git fetch/clone 链路。
+- 在临时目录使用 `pnpm v10.30.3` 执行 `pnpm install --frozen-lockfile --ignore-scripts` 完成验证，确认修复后锁文件可以正常安装，并且不会再触发 SSH 拉取。
+
 ## [0.0.26] - 2026-05-09
 
 ### 变更
