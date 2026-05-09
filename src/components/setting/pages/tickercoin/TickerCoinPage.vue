@@ -9,8 +9,6 @@ interface TickerSymbolCache {
   options: TickerSymbolOption[];
 }
 
-const TICKER_SYMBOL_CACHE_TTL_MS = 12 * 60 * 60 * 1000
-
 const tags = ref<string[]>([])
 const keyword = ref('')
 const selectedCoin = ref<string>()
@@ -64,10 +62,6 @@ const getStoredTickerSymbolCache = async () => {
   }
 
   return value as TickerSymbolCache
-}
-
-const isTickerSymbolCacheFresh = (cache: TickerSymbolCache) => {
-  return Date.now() - cache.updatedAt < TICKER_SYMBOL_CACHE_TTL_MS
 }
 
 const saveCoins = async () => {
