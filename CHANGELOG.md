@@ -17,6 +17,14 @@
 
 - 暂无
 
+## [0.0.28] - 2026-05-10
+
+### 变更
+
+- 将 `package.json` 版本号提升到 `0.0.28`，用于重新触发 GitHub Actions 并修复 mac 打包阶段新的 `ReadWrite` 运行时错误。
+- 在 GitHub Actions 中增加 `electron-builder` 依赖补丁步骤：安装依赖后将 `node_modules/app-builder-lib/out/binDownload.js` 中错误的 `@electron/get` 运行时导入改为 `@electron/get/dist/cjs/types`，修复 `Cannot read properties of undefined (reading 'ReadWrite')`。
+- 保留 `electron-builder 26.9.0` 的镜像修复能力，同时避开其当前发布包中的缓存模式导入缺陷。
+
 ## [0.0.27] - 2026-05-10
 
 ### 变更

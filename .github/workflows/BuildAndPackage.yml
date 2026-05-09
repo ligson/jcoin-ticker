@@ -58,6 +58,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Patch electron-builder cache mode import
+        shell: bash
+        run: |
+          node -e "const fs=require('fs'); const file='node_modules/app-builder-lib/out/binDownload.js'; const before='const get_1 = require(\"@electron/get\");'; const after='const get_1 = require(\"@electron/get/dist/cjs/types\");'; const text=fs.readFileSync(file,'utf8'); if (!text.includes(before)) { throw new Error('未找到需要修补的 electron-builder 导入语句'); } fs.writeFileSync(file, text.replace(before, after), 'utf8'); console.log('已修补 electron-builder 的缓存模式导入问题');"
+
       - name: Inspect download mirror config
         shell: bash
         run: |
