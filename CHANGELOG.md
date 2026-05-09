@@ -17,6 +17,16 @@
 
 - 暂无
 
+## [0.0.21] - 2026-05-09
+
+### 变更
+
+- 将 `package.json` 版本号提升到 `0.0.21`，用于重新触发 GitHub Actions 并验证本轮 mac 打包修复。
+- 调整 GitHub Actions 的 npm registry 配置，CI 构建时改用官方 registry，避免 mac 打包阶段下载 `dmg-builder` 辅助二进制时命中不存在的镜像地址并报 `404`。
+- 调整 `electron-builder` 的构建命令，改为显式使用 `--publish never`，避免 tag 构建时出现隐式发布告警。
+- 调整 mac 打包配置：改为生成 `universal` 安装包，同时兼容 Apple Silicon 与 Intel Mac，并补充应用图标配置。
+- 补充 `package.json` 中的 `description` 与 `author` 字段，消除 electron-builder 的元数据缺失告警。
+
 ## [0.0.20] - 2026-05-09
 
 ### 变更

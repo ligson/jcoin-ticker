@@ -13,6 +13,7 @@ on:
 env:
   ACTIONS_RUNNER_DEBUG: true
   ACTIONS_STEP_DEBUG: true
+  NPM_CONFIG_REGISTRY: https://registry.npmjs.org/
 
 permissions:
   contents: write # 授予写入权限用于创建 Release 和上传 Assets
@@ -162,7 +163,7 @@ jobs:
       - name: Find macOS Asset Path
         id: find_mac_asset
         run: |
-          DMG_PATH=$(find downloaded-artifacts/build-artifacts-macos-latest -name "*.dmg" | head -n 1)
+          DMG_PATH=$(find downloaded-artifacts/build-artifacts-macos-latest -name "*-Mac-universal-*.dmg" | head -n 1)
           if [ -z "$DMG_PATH" ]; then
             echo "::warning::Could not find macOS .dmg file in expected path. Skipping upload."
             # 不退出，允许流程继续
@@ -178,7 +179,7 @@ jobs:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
           # 使用上一步找到的精确路径
           asset_path: ${{ steps.find_mac_asset.outputs.macos_path }}
-          asset_name: jcoin-ticker-macos-installer.dmg
+          asset_name: jcoin-ticker-macos-universal-installer.dmg
           asset_content_type: application/octet-stream
 
       # ----------------------------------------------------

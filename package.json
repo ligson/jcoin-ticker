@@ -1,12 +1,14 @@
 {
   "name": "jcoin-ticker",
   "private": true,
-  "version": "0.0.20",
+  "version": "0.0.21",
+  "description": "一个基于 Electron 的桌面现货盯盘工具。",
+  "author": "ligson",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "start": "vite",
-    "build": "vue-tsc && vite build && electron-builder",
+    "build": "vue-tsc && vite build && electron-builder --publish never",
     "preview": "vite preview",
     "start:forge": "electron-forge start",
     "package": "electron-forge package",
