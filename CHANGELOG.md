@@ -17,6 +17,14 @@
 
 - 暂无
 
+## [0.0.33] - 2026-05-10
+
+### 变更
+
+- 将 `package.json` 版本号提升到 `0.0.33`，用于重新触发 GitHub Actions 并彻底修复 mac 打包阶段仍命中 `cdn.npmmirror.com` 的问题。
+- 调整 GitHub Actions 中 `electron-builder` 的运行方式：不再通过 `pnpm build` 间接启动 `electron-builder`，改为在同一 shell 中直接执行 `vue-tsc`、`vite build` 和 `node node_modules/electron-builder/cli.js --publish never`，绕开 `pnpm` 将 `.npmrc` 中 `electron_mirror=npmmirror` 注入子进程环境后覆盖 `dmg-builder` 下载源的问题。
+- 将 `electron-builder` 运行时补丁改为基于 `require.resolve()` 命中真实安装路径，并继续修复 `ReadWrite` 导入与二进制镜像函数，避免 `pnpm` 布局差异导致补丁落空。
+
 ## [0.0.32] - 2026-05-10
 
 ### 变更

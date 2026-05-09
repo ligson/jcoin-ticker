@@ -63,29 +63,34 @@ jobs:
         run: |
           node <<'NODE'
           const fs = require('fs')
-          const file = 'node_modules/app-builder-lib/out/binDownload.js'
-          const beforeImport = 'const get_1 = require("@electron/get");'
-          const afterImport = 'const get_1 = require("../../@electron/get/dist/cjs/types");'
-          const beforeMirror = `function getBinariesMirrorUrl(githubOrgRepo) {
-              return (process.env.NPM_CONFIG_ELECTRON_BUILDER_BINARIES_MIRROR ||
-                  process.env.npm_config_electron_builder_binaries_mirror ||
-                  process.env.npm_package_config_electron_builder_binaries_mirror ||
-                  process.env.ELECTRON_BUILDER_BINARIES_MIRROR ||
-                  \`https://github.com/\${githubOrgRepo}/releases/download/\`);
-          }`
-          const afterMirror = `function getBinariesMirrorUrl(githubOrgRepo) {
-              return \`https://github.com/\${githubOrgRepo}/releases/download/\`;
-          }`
+          const path = require('path')
+          const file = require.resolve('app-builder-lib/out/binDownload.js')
+          const rootTypesFile = require.resolve('@electron/get/dist/cjs/types.js')
+          let relativeTypesPath = path.relative(path.dirname(file), rootTypesFile).replace(/\\/g, '/')
+          if (!relativeTypesPath.startsWith('.')) {
+            relativeTypesPath = `./${relativeTypesPath}`
+          }
+          relativeTypesPath = relativeTypesPath.replace(/\.js$/, '')
           let text = fs.readFileSync(file, 'utf8')
-          if (!text.includes(beforeImport)) {
+          if (!text.includes('const get_1 = require("@electron/get");')) {
             throw new Error('未找到需要修补的 electron-builder 导入语句')
           }
-          if (!text.includes('process.env.NPM_CONFIG_ELECTRON_BUILDER_BINARIES_MIRROR')) {
+          if (!text.includes('function getBinariesMirrorUrl(githubOrgRepo) {')) {
             throw new Error('未找到需要修补的 electron-builder 镜像函数')
           }
-          text = text.replace(beforeImport, afterImport).replace(beforeMirror, afterMirror)
+          text = text.replace(
+            'const get_1 = require("@electron/get");',
+            `const get_1 = require("${relativeTypesPath}");`
+          )
+          text = text.replace(
+            /function getBinariesMirrorUrl\(githubOrgRepo\) \{[\s\S]*?\n\}/,
+            `function getBinariesMirrorUrl(githubOrgRepo) {
+    return \`https://github.com/\${githubOrgRepo}/releases/download/\`;
+}`
+          )
           fs.writeFileSync(file, text, 'utf8')
-          console.log('已修补 electron-builder 的缓存模式与二进制镜像逻辑')
+          console.log(`已修补 electron-builder：${file}`)
+          console.log(`已强制缓存模式导入路径：${relativeTypesPath}`)
           NODE
 
       - name: Inspect download mirror config
@@ -108,10 +113,15 @@ jobs:
           export NPM_CONFIG_ELECTRON_MIRROR=""
           export npm_config_electron_mirror=""
           export npm_package_config_electron_mirror=""
+          export ELECTRON_MIRROR=""
           export NPM_CONFIG_ELECTRON_BUILDER_BINARIES_MIRROR="https://github.com/electron-userland/electron-builder-binaries/releases/download/"
           export npm_config_electron_builder_binaries_mirror="https://github.com/electron-userland/electron-builder-binaries/releases/download/"
           export npm_package_config_electron_builder_binaries_mirror="https://github.com/electron-userland/electron-builder-binaries/releases/download/"
-          pnpm build
+          export PATH="$PWD/node_modules/.bin:$PATH"
+          vue-tsc
+          vite build
+          node -e "console.log(JSON.stringify({ NPM_CONFIG_ELECTRON_MIRROR: process.env.NPM_CONFIG_ELECTRON_MIRROR ?? null, npm_config_electron_mirror: process.env.npm_config_electron_mirror ?? null, npm_package_config_electron_mirror: process.env.npm_package_config_electron_mirror ?? null, ELECTRON_MIRROR: process.env.ELECTRON_MIRROR ?? null }, null, 2))"
+          node node_modules/electron-builder/cli.js --publish never
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
