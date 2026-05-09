@@ -29,17 +29,33 @@ jobs:
       - name: Checkout Git repository
         uses: actions/checkout@v4 # 推荐使用 v4
 
-      - name: Install Node.js, NPM and Yarn
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Install Node.js
         uses: actions/setup-node@v4 # 推荐使用 v4
         with:
-          node-version: 20 # 推荐使用 LTS 版本，例如 20
+          node-version: 22.12.0
+          cache: pnpm
+
+      - name: Validate tag matches package version
+        shell: bash
+        run: |
+          PACKAGE_VERSION=$(node -p "JSON.parse(require('fs').readFileSync('package.json', 'utf8')).version")
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+
+          if [ "$PACKAGE_VERSION" != "$TAG_VERSION" ]; then
+            echo "::error::package.json 版本 ($PACKAGE_VERSION) 与当前 tag ($GITHUB_REF_NAME) 不一致。"
+            exit 1
+          fi
 
       - name: Install dependencies
-        # 移除 yarn global add electron-builder，使用项目本地依赖
-        run: yarn install
+        run: pnpm install --frozen-lockfile
 
       - name: Build Electron app
-        run: yarn build  # 使用 electron-builder 构建
+        run: pnpm build
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -68,6 +84,41 @@ jobs:
         run: |
           ls -R downloaded-artifacts/ # 使用 -R 递归显示文件结构
 
+      - name: Extract release notes from CHANGELOG
+        id: release_notes
+        shell: bash
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+
+          awk -v version="$TAG_VERSION" '
+            BEGIN {
+              target = "## [" version "]"
+            }
+            index($0, target) == 1 {
+              started = 1
+            }
+            started && /^## \[/ && index($0, target) != 1 {
+              exit
+            }
+            started {
+              print
+            }
+          ' CHANGELOG.md > release-notes.md
+
+          if [ ! -s release-notes.md ]; then
+            cat <<'EOF' > release-notes.md
+          ## 更新说明
+
+          本次发布未能从 `CHANGELOG.md` 中提取到与当前版本对应的章节，请检查 changelog 与 `package.json` 的版本是否一致。
+          EOF
+          fi
+
+          {
+            echo 'body<<EOF'
+            cat release-notes.md
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+
       - name: Create Release
         id: create_release
         uses: actions/create-release@v1
@@ -76,6 +127,7 @@ jobs:
         with:
           tag_name: ${{ github.ref }}
           release_name: Release ${{ github.ref }}
+          body: ${{ steps.release_notes.outputs.body }}
           draft: false
           prerelease: false
 

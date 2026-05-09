@@ -22,12 +22,18 @@ const getAvatarColor = (coin: string) => {
   return avatarColors.value[index];
 };
 
+const getTrendClass = (priceChangePercentage: string) => {
+  return Number(priceChangePercentage) >= 0
+      ? 'ticker-list-item--up'
+      : 'ticker-list-item--down'
+}
+
 </script>
 
 <template>
-  <a-list item-layout="horizontal" :data-source="coinPrices">
+  <a-list class="ticker-price-list" item-layout="horizontal" :data-source="coinPrices">
     <template #renderItem="{ item }">
-      <a-list-item :key="item.coin">
+      <a-list-item :key="item.coin" class="ticker-list-item" :class="getTrendClass(item.priceChangePercentage)">
         <a-list-item-meta>
           <template #description>
             <template v-if="item.priceChangePercentage>0">
@@ -55,5 +61,55 @@ const getAvatarColor = (coin: string) => {
 </template>
 
 <style scoped>
+.ticker-price-list {
+  padding: 8px 4px;
+}
 
+.ticker-list-item {
+  margin-bottom: 12px;
+  padding: 16px 18px !important;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 18px;
+  background:
+      linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(248, 250, 252, 0.92));
+  transition:
+      border-color 0.22s ease,
+      background 0.22s ease;
+  cursor: pointer;
+}
+
+.ticker-list-item--up:hover {
+  border-color: rgba(34, 197, 94, 0.24);
+  background:
+      linear-gradient(135deg, rgba(240, 253, 244, 0.98), rgba(220, 252, 231, 0.94));
+}
+
+.ticker-list-item--down:hover {
+  border-color: rgba(248, 113, 113, 0.24);
+  background:
+      linear-gradient(135deg, rgba(255, 241, 242, 0.98), rgba(255, 228, 230, 0.94));
+}
+
+.ticker-list-item :deep(.ant-list-item-meta) {
+  align-items: center;
+}
+
+.ticker-list-item :deep(.ant-list-item-meta-title) {
+  margin-bottom: 10px;
+  font-size: 24px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.ticker-list-item :deep(.ant-list-item-meta-description) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.ticker-list-item :deep(.ant-tag) {
+  margin-inline-end: 0;
+  border-radius: 999px;
+}
 </style>
