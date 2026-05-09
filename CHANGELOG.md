@@ -17,6 +17,13 @@
 
 - 暂无
 
+## [0.0.23] - 2026-05-09
+
+### 变更
+
+- 将 `package.json` 版本号提升到 `0.0.23`，用于重新触发 GitHub Actions 并验证 `electron-builder-binaries` 下载源修复。
+- 为 GitHub Actions 显式指定 `electron-builder-binaries` 官方下载源，避免 mac 打包阶段下载 `dmg-builder` 时继续命中 `cdn.npmmirror.com` 并报 `404`。
+
 ## [0.0.22] - 2026-05-09
 
 ### 变更
