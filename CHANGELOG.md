@@ -17,6 +17,14 @@
 
 - 暂无
 
+## [0.0.29] - 2026-05-10
+
+### 变更
+
+- 将 `package.json` 版本号提升到 `0.0.29`，用于重新触发 GitHub Actions 并修复 mac 打包阶段补丁仍命中错误 `@electron/get` 副本的问题。
+- 调整 GitHub Actions 中的 `electron-builder` 补丁目标：不再通过包名解析 `@electron/get/dist/cjs/types`，改为使用相对路径 `../../@electron/get/dist/cjs/types`，强制引用顶层真正导出 `ElectronDownloadCacheMode` 的实现。
+- 修复 `app-builder-lib` 包内嵌套的空壳 `@electron/get/dist/cjs/types.js` 导致补丁“执行成功但运行时仍报 `ReadWrite` 未定义”的问题。
+
 ## [0.0.28] - 2026-05-10
 
 ### 变更
