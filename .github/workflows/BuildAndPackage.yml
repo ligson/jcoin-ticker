@@ -60,21 +60,22 @@ jobs:
 
       - name: Inspect download mirror config
         shell: bash
-        env:
-          NPM_CONFIG_ELECTRON_MIRROR: ""
-          npm_config_electron_mirror: ""
-          npm_package_config_electron_mirror: ""
         run: |
+          export NPM_CONFIG_ELECTRON_MIRROR=""
+          export npm_config_electron_mirror=""
+          export npm_package_config_electron_mirror=""
           echo "pnpm electron_mirror: $(pnpm config get electron_mirror)"
           node -e "console.log(JSON.stringify({ NPM_CONFIG_ELECTRON_MIRROR: process.env.NPM_CONFIG_ELECTRON_MIRROR ?? null, npm_config_electron_mirror: process.env.npm_config_electron_mirror ?? null, npm_package_config_electron_mirror: process.env.npm_package_config_electron_mirror ?? null, NPM_CONFIG_ELECTRON_BUILDER_BINARIES_MIRROR: process.env.NPM_CONFIG_ELECTRON_BUILDER_BINARIES_MIRROR ?? null, ELECTRON_BUILDER_BINARIES_MIRROR: process.env.ELECTRON_BUILDER_BINARIES_MIRROR ?? null }, null, 2))"
 
       - name: Build Electron app
-        run: pnpm build
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NPM_CONFIG_ELECTRON_MIRROR: ""
-          npm_config_electron_mirror: ""
-          npm_package_config_electron_mirror: ""
+        shell: bash
+        run: |
+          export NPM_CONFIG_ELECTRON_MIRROR=""
+          export npm_config_electron_mirror=""
+          export npm_package_config_electron_mirror=""
+          pnpm build
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
