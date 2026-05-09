@@ -17,6 +17,28 @@
 
 - 暂无
 
+## [0.0.32] - 2026-05-10
+
+### 变更
+
+- 将 `package.json` 版本号提升到 `0.0.32`，用于重新触发 GitHub Actions 并彻底修复上一版 `node -e` 补丁脚本仍受 shell 展开干扰的问题。
+- 将 GitHub Actions 中的 `electron-builder` 运行时补丁从单行 `node -e` 改为 heredoc 形式的 `node <<'NODE'`，避免反引号与 ``${...}`` 模板字符串在 shell 层被提前解析，确保 `binDownload.js` 的镜像函数补丁原样生效。
+
+## [0.0.31] - 2026-05-10
+
+### 变更
+
+- 将 `package.json` 版本号提升到 `0.0.31`，用于重新触发 GitHub Actions 并修复上一版 workflow 中 `node -e` 补丁脚本的模板字符串被 shell 提前展开的问题。
+- 对 `electron-builder` 运行时补丁中的 ``${githubOrgRepo}`` 进行 shell 层转义，确保 `beforeMirror` / `afterMirror` 能正确匹配并替换 `binDownload.js` 内的镜像函数实现。
+
+## [0.0.30] - 2026-05-10
+
+### 变更
+
+- 将 `package.json` 版本号提升到 `0.0.30`，用于重新触发 GitHub Actions 并修复 mac 打包阶段 `dmg-builder` 仍错误命中 `cdn.npmmirror.com` 的问题。
+- 扩展 GitHub Actions 中的 `electron-builder` 运行时补丁：除修复 `ReadWrite` 导入外，同步将 `app-builder-lib/out/binDownload.js` 的 `getBinariesMirrorUrl()` 固定到 GitHub 官方 `electron-builder-binaries` release 地址，避免 `dmg-builder` 下载链路再次落回错误镜像。
+- 保留前一版对顶层 `@electron/get/dist/cjs/types` 的相对路径修复，继续绕开 `app-builder-lib` 包内嵌套空壳 `types.js` 的导出问题。
+
 ## [0.0.29] - 2026-05-10
 
 ### 变更
