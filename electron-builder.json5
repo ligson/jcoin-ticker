@@ -4,7 +4,7 @@
   "appId": "jcoin-ticker",
   "asar": true,
   "productName": "jcoin-ticker",
-  "icon": "public/btc.png",
+  "icon": "public/btc-mac.png",
   "directories": {
     "output": "release/${version}"
   },

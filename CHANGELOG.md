@@ -17,6 +17,14 @@
 
 - 暂无
 
+## [0.0.22] - 2026-05-09
+
+### 变更
+
+- 将 `package.json` 版本号提升到 `0.0.22`，用于重新触发 GitHub Actions 并验证本轮图标与 Node 24 兼容修复。
+- 新增 `public/btc-mac.png` 高分辨率比特币图标，并将 mac 打包图标切换到该文件，修复 icon 小于 `512x512` 时的构建失败。
+- 为 GitHub Actions 增加 `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true`，提前切换到 Node 24 JavaScript Actions 运行时，避免 Node 20 弃用告警。
+
 ## [0.0.21] - 2026-05-09
 
 ### 变更
