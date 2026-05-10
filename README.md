@@ -13,11 +13,14 @@
 ## 当前功能
 
 - 实时展示币种最新价格
+- 首页顶部增加“市场总览”仪表盘条，集中展示市场情绪、BTC/ETH 大盘和当前监控列表的整体状态
+- 首页每个币种卡片增加 `24H` sparkline 小走势，便于快速判断短线趋势
 - 首页增加全局市场情绪指数卡片，支持查看不同区间下的情绪曲线变化
 - 展示 24h 涨跌幅、最高价、最低价、成交量和成交额
 - 支持多个币种并按配置顺序显示
 - 支持在首页通过拖拽调整币种顺序，并持久化保存到本地
 - 支持点击首页币种进入详情页，查看常见周期 K 线与区间统计
+- 详情页图表支持十字准星、hover 数值提示和周期切换过渡反馈
 - WebSocket 断开后自动重连
 - 使用 `electron-store` 持久化币种列表
 - 支持在设置页配置代理，并让后续网络请求优先走该代理
@@ -136,6 +139,16 @@ pnpm make     # electron-forge make
 - `pnpm package` / `pnpm make`：使用 Electron Forge
 
 仓库内还有 GitHub Actions 工作流 `.github/workflows/BuildAndPackage.yml`，用于在打 tag 后执行多平台构建并上传 Release 资产。
+
+发版时请严格按这个顺序执行，避免 tag 指向错误提交：
+
+1. 修改 `package.json` 版本号，并将 `CHANGELOG.md` 的 `未发布` 内容整理到对应版本章节。
+2. 提交本次发版 commit。
+3. 基于该 commit 创建 `v版本号` tag。
+4. 在推送前校验 `git show <tag>:package.json` 与 `git show <tag>:CHANGELOG.md`，确认 tag 指向的内容正确。
+5. 先推送分支，再推送 tag。
+
+不要把 `git commit`、`git tag`、`git push` 并行执行。
 
 ## 协作约定
 

@@ -20,6 +20,7 @@ const ALTERNATIVE_FEAR_GREED_API_URL = 'https://api.alternative.me/fng/'
 const MARKET_SENTIMENT_CACHE_TTL_MS = 30 * 60 * 1000
 
 let historyCache: {updatedAt: number; points: MarketSentimentPoint[]} | null = null
+let historyPromise: Promise<MarketSentimentPoint[]> | null = null
 
 const toNumber = (value: unknown) => {
     const numberValue = Number(value)
@@ -43,25 +44,37 @@ export const fetchMarketSentimentHistory = async (forceRefresh = false) => {
         return historyCache.points
     }
 
-    const payload = await fetchJson<AlternativeFearGreedResponse>(
-        `${ALTERNATIVE_FEAR_GREED_API_URL}?limit=0&format=json`,
-        '获取市场情绪指数失败'
-    )
-
-    const points = (Array.isArray(payload.data) ? payload.data : [])
-        .map((item) => ({
-            timestamp: toNumber(item.timestamp) * 1000,
-            value: toNumber(item.value),
-            classification: String(item.value_classification ?? '')
-        }))
-        .filter((item) => Number.isFinite(item.timestamp) && Number.isFinite(item.value) && item.value >= 0)
-        .sort((first, second) => first.timestamp - second.timestamp)
-
-    historyCache = {
-        updatedAt: Date.now(),
-        points
+    if (!forceRefresh && historyPromise) {
+        return await historyPromise
     }
-    return points
+
+    historyPromise = (async () => {
+        const payload = await fetchJson<AlternativeFearGreedResponse>(
+            `${ALTERNATIVE_FEAR_GREED_API_URL}?limit=0&format=json`,
+            '获取市场情绪指数失败'
+        )
+
+        const points = (Array.isArray(payload.data) ? payload.data : [])
+            .map((item) => ({
+                timestamp: toNumber(item.timestamp) * 1000,
+                value: toNumber(item.value),
+                classification: String(item.value_classification ?? '')
+            }))
+            .filter((item) => Number.isFinite(item.timestamp) && Number.isFinite(item.value) && item.value >= 0)
+            .sort((first, second) => first.timestamp - second.timestamp)
+
+        historyCache = {
+            updatedAt: Date.now(),
+            points
+        }
+        return points
+    })()
+
+    try {
+        return await historyPromise
+    } finally {
+        historyPromise = null
+    }
 }
 
 export const sliceMarketSentimentHistory = (points: MarketSentimentPoint[], range: MarketSentimentRange) => {

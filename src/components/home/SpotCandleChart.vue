@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import {computed} from "vue";
+import {computed, ref} from "vue";
 import {SpotCandle} from "./spotMarketDataSources.ts";
 
 const props = defineProps<{
@@ -19,6 +19,7 @@ const chartPadding = {
 
 const plotWidth = viewBoxWidth - chartPadding.left - chartPadding.right
 const plotHeight = viewBoxHeight - chartPadding.top - chartPadding.bottom
+const hoveredIndex = ref<number | null>(null)
 
 const normalizedCandles = computed(() => {
   return [...props.candles].sort((first, second) => first.openTime - second.openTime)
@@ -137,7 +138,76 @@ const lastPriceLabel = computed(() => {
   return formatPrice(lastCloseItem.value.close)
 })
 
+const hoveredItem = computed(() => {
+  if (hoveredIndex.value === null) {
+    return null
+  }
+  return chartItems.value[hoveredIndex.value] ?? null
+})
+
+const activeItem = computed(() => hoveredItem.value ?? lastCloseItem.value)
+
+const activePriceLabel = computed(() => {
+  if (!activeItem.value) {
+    return ''
+  }
+  return formatPrice(activeItem.value.close)
+})
+
+const hoverTooltipClass = computed(() => {
+  if (!hoveredItem.value) {
+    return ''
+  }
+  return hoveredItem.value.x > (viewBoxWidth * 0.7)
+      ? 'spot-candle-chart__tooltip--left'
+      : 'spot-candle-chart__tooltip--right'
+})
+
+const hoverTooltipStyle = computed(() => {
+  if (!hoveredItem.value) {
+    return {}
+  }
+  return {
+    left: `${(hoveredItem.value.x / viewBoxWidth) * 100}%`,
+    top: `${(Math.max(chartPadding.top + 12, hoveredItem.value.highY - 10) / viewBoxHeight) * 100}%`
+  }
+})
+
+const hoverPriceLineLabel = computed(() => {
+  if (!hoveredItem.value) {
+    return ''
+  }
+  return formatPrice(hoveredItem.value.close)
+})
+
+function handlePointerMove(event: MouseEvent) {
+  const currentTarget = event.currentTarget as HTMLElement | null
+  if (!currentTarget || chartItems.value.length === 0) {
+    hoveredIndex.value = null
+    return
+  }
+
+  const rect = currentTarget.getBoundingClientRect()
+  const relativeX = ((event.clientX - rect.left) / rect.width) * viewBoxWidth
+  const clampedX = Math.min(viewBoxWidth - chartPadding.right, Math.max(chartPadding.left, relativeX))
+  const step = chartItems.value.length > 1
+      ? plotWidth / (chartItems.value.length - 1)
+      : plotWidth
+  const nextIndex = chartItems.value.length === 1
+      ? 0
+      : Math.round((clampedX - chartPadding.left) / step)
+
+  hoveredIndex.value = Math.min(chartItems.value.length - 1, Math.max(0, nextIndex))
+}
+
+function handlePointerLeave() {
+  hoveredIndex.value = null
+}
+
 function formatPrice(value: number) {
+  if (!Number.isFinite(value) || value <= 0) {
+    return '--'
+  }
   if (value >= 1000) {
     return value.toFixed(2)
   }
@@ -148,6 +218,29 @@ function formatPrice(value: number) {
     return value.toFixed(6)
   }
   return value.toFixed(8)
+}
+
+function formatSignedPercent(value: number) {
+  if (!Number.isFinite(value)) {
+    return '--'
+  }
+  return `${value > 0 ? '+' : ''}${value.toFixed(2)}%`
+}
+
+function formatCompactNumber(value: number) {
+  if (!Number.isFinite(value) || value <= 0) {
+    return '--'
+  }
+  if (value >= 1_000_000_000) {
+    return `${(value / 1_000_000_000).toFixed(2)}B`
+  }
+  if (value >= 1_000_000) {
+    return `${(value / 1_000_000).toFixed(2)}M`
+  }
+  if (value >= 1_000) {
+    return `${(value / 1_000).toFixed(2)}K`
+  }
+  return value.toFixed(2)
 }
 
 function formatAxisTime(timestamp: number) {
@@ -168,6 +261,11 @@ function formatAxisTime(timestamp: number) {
 
   return `${month}-${day} ${hour}:${minute}`
 }
+
+function formatTooltipTime(timestamp: number) {
+  const date = new Date(timestamp)
+  return `${date.getFullYear()}-${`${date.getMonth() + 1}`.padStart(2, '0')}-${`${date.getDate()}`.padStart(2, '0')} ${`${date.getHours()}`.padStart(2, '0')}:${`${date.getMinutes()}`.padStart(2, '0')}`
+}
 </script>
 
 <template>
@@ -179,11 +277,16 @@ function formatAxisTime(timestamp: number) {
       </div>
       <div v-if="lastCloseItem" class="spot-candle-chart__last-price">
         <span class="spot-candle-chart__last-label">最新收盘</span>
-        <strong>{{ lastPriceLabel }}</strong>
+        <strong>{{ activePriceLabel || lastPriceLabel }}</strong>
       </div>
     </div>
 
-    <div v-if="chartItems.length > 0" class="spot-candle-chart__canvas">
+    <div
+        v-if="chartItems.length > 0"
+        class="spot-candle-chart__canvas"
+        @mousemove="handlePointerMove"
+        @mouseleave="handlePointerLeave"
+    >
       <svg
           :viewBox="`0 0 ${viewBoxWidth} ${viewBoxHeight}`"
           class="spot-candle-chart__svg"
@@ -214,7 +317,11 @@ function formatAxisTime(timestamp: number) {
             class="spot-candle-chart__close-line"
         />
 
-        <g v-for="item in chartItems" :key="item.openTime">
+        <g
+            v-for="item in chartItems"
+            :key="item.openTime"
+            :class="{'spot-candle-chart__candle-group--muted': hoveredItem && hoveredItem.openTime !== item.openTime}"
+        >
           <line
               :x1="item.x"
               :x2="item.x"
@@ -232,17 +339,17 @@ function formatAxisTime(timestamp: number) {
           />
         </g>
 
-        <template v-if="lastCloseItem">
+        <template v-if="activeItem">
           <line
               :x1="chartPadding.left"
               :x2="viewBoxWidth - chartPadding.right"
-              :y1="lastCloseItem.closeY"
-              :y2="lastCloseItem.closeY"
+              :y1="activeItem.closeY"
+              :y2="activeItem.closeY"
               class="spot-candle-chart__last-line"
           />
           <rect
               :x="viewBoxWidth - chartPadding.right + 12"
-              :y="lastCloseItem.closeY - 13"
+              :y="activeItem.closeY - 13"
               width="64"
               height="26"
               rx="13"
@@ -250,12 +357,35 @@ function formatAxisTime(timestamp: number) {
           />
           <text
               :x="viewBoxWidth - chartPadding.right + 44"
-              :y="lastCloseItem.closeY + 5"
+              :y="activeItem.closeY + 5"
               text-anchor="middle"
               class="spot-candle-chart__last-badge-text"
           >
-            {{ lastPriceLabel }}
+            {{ hoveredItem ? hoverPriceLineLabel : lastPriceLabel }}
           </text>
+        </template>
+
+        <template v-if="hoveredItem">
+          <line
+              :x1="hoveredItem.x"
+              :x2="hoveredItem.x"
+              :y1="chartPadding.top"
+              :y2="chartPadding.top + plotHeight"
+              class="spot-candle-chart__crosshair-line"
+          />
+          <line
+              :x1="chartPadding.left"
+              :x2="viewBoxWidth - chartPadding.right"
+              :y1="hoveredItem.closeY"
+              :y2="hoveredItem.closeY"
+              class="spot-candle-chart__crosshair-line spot-candle-chart__crosshair-line--horizontal"
+          />
+          <circle
+              :cx="hoveredItem.x"
+              :cy="hoveredItem.closeY"
+              r="5"
+              class="spot-candle-chart__crosshair-point"
+          />
         </template>
 
         <text
@@ -269,6 +399,29 @@ function formatAxisTime(timestamp: number) {
           {{ label.label }}
         </text>
       </svg>
+
+      <div
+          v-if="hoveredItem"
+          class="spot-candle-chart__tooltip"
+          :class="hoverTooltipClass"
+          :style="hoverTooltipStyle"
+      >
+        <div class="spot-candle-chart__tooltip-time">{{ formatTooltipTime(hoveredItem.openTime) }}</div>
+        <div class="spot-candle-chart__tooltip-grid">
+          <span>开</span>
+          <strong>{{ formatPrice(hoveredItem.open) }}</strong>
+          <span>高</span>
+          <strong>{{ formatPrice(hoveredItem.high) }}</strong>
+          <span>低</span>
+          <strong>{{ formatPrice(hoveredItem.low) }}</strong>
+          <span>收</span>
+          <strong>{{ formatPrice(hoveredItem.close) }}</strong>
+          <span>涨跌</span>
+          <strong>{{ formatSignedPercent(((hoveredItem.close - hoveredItem.open) / hoveredItem.open) * 100) }}</strong>
+          <span>成交量</span>
+          <strong>{{ formatCompactNumber(hoveredItem.volume) }}</strong>
+        </div>
+      </div>
     </div>
 
     <div v-else class="spot-candle-chart__empty">
@@ -324,6 +477,7 @@ function formatAxisTime(timestamp: number) {
 }
 
 .spot-candle-chart__canvas {
+  position: relative;
   width: 100%;
   height: 360px;
   border-radius: 26px;
@@ -360,6 +514,10 @@ function formatAxisTime(timestamp: number) {
   stroke-linecap: round;
 }
 
+.spot-candle-chart__candle-group--muted {
+  opacity: 0.34;
+}
+
 .spot-candle-chart__wick--up {
   stroke: rgba(22, 163, 74, 0.88);
 }
@@ -382,6 +540,22 @@ function formatAxisTime(timestamp: number) {
   stroke-dasharray: 4 5;
 }
 
+.spot-candle-chart__crosshair-line {
+  stroke: rgba(15, 23, 42, 0.16);
+  stroke-width: 1.2;
+  stroke-dasharray: 4 5;
+}
+
+.spot-candle-chart__crosshair-line--horizontal {
+  stroke: rgba(59, 130, 246, 0.3);
+}
+
+.spot-candle-chart__crosshair-point {
+  fill: #ffffff;
+  stroke: rgba(59, 130, 246, 0.88);
+  stroke-width: 2.5;
+}
+
 .spot-candle-chart__last-badge {
   fill: rgba(15, 23, 42, 0.92);
 }
@@ -400,6 +574,51 @@ function formatAxisTime(timestamp: number) {
   text-align: center;
 }
 
+.spot-candle-chart__tooltip {
+  position: absolute;
+  min-width: 188px;
+  padding: 12px 14px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 18px;
+  background: rgba(15, 23, 42, 0.92);
+  color: #f8fafc;
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.18);
+  pointer-events: none;
+  transform: translate(-50%, calc(-100% - 12px));
+}
+
+.spot-candle-chart__tooltip--left {
+  transform: translate(calc(-100% - 14px), calc(-100% - 12px));
+}
+
+.spot-candle-chart__tooltip--right {
+  transform: translate(14px, calc(-100% - 12px));
+}
+
+.spot-candle-chart__tooltip-time {
+  margin-bottom: 10px;
+  color: rgba(226, 232, 240, 0.82);
+  font-size: 11px;
+}
+
+.spot-candle-chart__tooltip-grid {
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 6px 12px;
+  align-items: center;
+}
+
+.spot-candle-chart__tooltip-grid span {
+  color: rgba(203, 213, 225, 0.82);
+  font-size: 11px;
+}
+
+.spot-candle-chart__tooltip-grid strong {
+  color: #ffffff;
+  font-size: 12px;
+  text-align: right;
+}
+
 @media (max-width: 768px) {
   .spot-candle-chart__header {
     flex-direction: column;
@@ -411,6 +630,11 @@ function formatAxisTime(timestamp: number) {
 
   .spot-candle-chart__canvas {
     height: 300px;
+  }
+
+  .spot-candle-chart__tooltip {
+    min-width: 164px;
+    padding: 10px 12px;
   }
 }
 </style>

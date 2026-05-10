@@ -48,6 +48,9 @@
 - 新增或修改业务日志、提示日志时，优先使用中文。
 - 不要乱发挥，未被请求的功能、页面、流程不要主动扩展。
 - 当用户说“发版”时，默认含义是：将 `package.json` 版本号按补丁位加一、整理 `CHANGELOG.md`、提交代码、推送远端，并创建对应的 `v版本号` tag。
+- 发版动作必须串行执行，不能把 `git commit`、`git tag`、`git push` 并行跑。
+- 正确发版顺序固定为：1. 修改版本和 changelog 2. 提交 commit 3. 在该 commit 上创建 tag 4. 校验 `git show <tag>:package.json` 与 `git show <tag>:CHANGELOG.md` 5. 推送分支 6. 推送 tag。
+- 如果 tag 指错提交，不要静默重写已发布 tag；优先补发一个新的补丁版本，并在 `CHANGELOG.md` 中注明上一个错误 tag 的原因。
 
 ## 文档规则
 

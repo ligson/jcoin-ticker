@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import {computed} from "vue";
+import {computed, ref} from "vue";
 import {SpotMetricPoint} from "./spotAssetMetrics.ts";
 
 const props = defineProps<{
@@ -25,6 +25,7 @@ const chartPadding = {
 
 const plotWidth = viewBoxWidth - chartPadding.left - chartPadding.right
 const plotHeight = viewBoxHeight - chartPadding.top - chartPadding.bottom
+const hoveredIndex = ref<number | null>(null)
 
 const normalizedPoints = computed(() => {
   return [...props.points]
@@ -144,6 +145,60 @@ const lastValueLabel = computed(() => {
 })
 
 const accentClass = computed(() => `spot-metric-trend-chart--${props.accent ?? 'sky'}`)
+const hoveredPoint = computed(() => {
+  if (hoveredIndex.value === null) {
+    return null
+  }
+  return chartItems.value[hoveredIndex.value] ?? null
+})
+const activePoint = computed(() => hoveredPoint.value ?? lastPoint.value)
+const activeValueLabel = computed(() => {
+  if (!activePoint.value) {
+    return ''
+  }
+  return formatValue(activePoint.value.value)
+})
+const tooltipClass = computed(() => {
+  if (!hoveredPoint.value) {
+    return ''
+  }
+  return hoveredPoint.value.x > (viewBoxWidth * 0.7)
+      ? 'spot-metric-trend-chart__tooltip--left'
+      : 'spot-metric-trend-chart__tooltip--right'
+})
+const tooltipStyle = computed(() => {
+  if (!hoveredPoint.value) {
+    return {}
+  }
+  return {
+    left: `${(hoveredPoint.value.x / viewBoxWidth) * 100}%`,
+    top: `${(Math.max(chartPadding.top + 10, hoveredPoint.value.y - 8) / viewBoxHeight) * 100}%`
+  }
+})
+
+function handlePointerMove(event: MouseEvent) {
+  const currentTarget = event.currentTarget as HTMLElement | null
+  if (!currentTarget || chartItems.value.length === 0) {
+    hoveredIndex.value = null
+    return
+  }
+
+  const rect = currentTarget.getBoundingClientRect()
+  const relativeX = ((event.clientX - rect.left) / rect.width) * viewBoxWidth
+  const clampedX = Math.min(viewBoxWidth - chartPadding.right, Math.max(chartPadding.left, relativeX))
+  const step = chartItems.value.length > 1
+      ? plotWidth / (chartItems.value.length - 1)
+      : plotWidth
+  const nextIndex = chartItems.value.length === 1
+      ? 0
+      : Math.round((clampedX - chartPadding.left) / step)
+
+  hoveredIndex.value = Math.min(chartItems.value.length - 1, Math.max(0, nextIndex))
+}
+
+function handlePointerLeave() {
+  hoveredIndex.value = null
+}
 
 function formatCompactNumber(value: number) {
   if (!Number.isFinite(value) || value <= 0) {
@@ -194,6 +249,11 @@ function formatAxisTime(timestamp: number) {
 
   return `${month}-${day} ${hour}:00`
 }
+
+function formatTooltipTime(timestamp: number) {
+  const date = new Date(timestamp)
+  return `${date.getFullYear()}-${`${date.getMonth() + 1}`.padStart(2, '0')}-${`${date.getDate()}`.padStart(2, '0')} ${`${date.getHours()}`.padStart(2, '0')}:${`${date.getMinutes()}`.padStart(2, '0')}`
+}
 </script>
 
 <template>
@@ -206,11 +266,16 @@ function formatAxisTime(timestamp: number) {
       </div>
       <div v-if="lastPoint" class="spot-metric-trend-chart__last-value">
         <span>最新值</span>
-        <strong>{{ lastValueLabel }}</strong>
+        <strong>{{ activeValueLabel || lastValueLabel }}</strong>
       </div>
     </div>
 
-    <div v-if="chartItems.length > 0" class="spot-metric-trend-chart__canvas">
+    <div
+        v-if="chartItems.length > 0"
+        class="spot-metric-trend-chart__canvas"
+        @mousemove="handlePointerMove"
+        @mouseleave="handlePointerLeave"
+    >
       <svg
           :viewBox="`0 0 ${viewBoxWidth} ${viewBoxHeight}`"
           class="spot-metric-trend-chart__svg"
@@ -247,24 +312,24 @@ function formatAxisTime(timestamp: number) {
         <path :d="linePath" class="spot-metric-trend-chart__line" />
 
         <circle
-            v-if="lastPoint"
-            :cx="lastPoint.x"
-            :cy="lastPoint.y"
+            v-if="activePoint"
+            :cx="activePoint.x"
+            :cy="activePoint.y"
             r="5.5"
             class="spot-metric-trend-chart__point"
         />
 
-        <template v-if="lastPoint">
+        <template v-if="activePoint">
           <line
               :x1="chartPadding.left"
               :x2="viewBoxWidth - chartPadding.right"
-              :y1="lastPoint.y"
-              :y2="lastPoint.y"
+              :y1="activePoint.y"
+              :y2="activePoint.y"
               class="spot-metric-trend-chart__last-line"
           />
           <rect
               :x="viewBoxWidth - chartPadding.right + 12"
-              :y="lastPoint.y - 13"
+              :y="activePoint.y - 13"
               width="74"
               height="26"
               rx="13"
@@ -272,12 +337,29 @@ function formatAxisTime(timestamp: number) {
           />
           <text
               :x="viewBoxWidth - chartPadding.right + 49"
-              :y="lastPoint.y + 5"
+              :y="activePoint.y + 5"
               text-anchor="middle"
               class="spot-metric-trend-chart__last-badge-text"
           >
-            {{ lastValueLabel }}
+            {{ activeValueLabel || lastValueLabel }}
           </text>
+        </template>
+
+        <template v-if="hoveredPoint">
+          <line
+              :x1="hoveredPoint.x"
+              :x2="hoveredPoint.x"
+              :y1="chartPadding.top"
+              :y2="chartPadding.top + plotHeight"
+              class="spot-metric-trend-chart__crosshair-line"
+          />
+          <line
+              :x1="chartPadding.left"
+              :x2="viewBoxWidth - chartPadding.right"
+              :y1="hoveredPoint.y"
+              :y2="hoveredPoint.y"
+              class="spot-metric-trend-chart__crosshair-line spot-metric-trend-chart__crosshair-line--horizontal"
+          />
         </template>
 
         <text
@@ -291,6 +373,19 @@ function formatAxisTime(timestamp: number) {
           {{ label.label }}
         </text>
       </svg>
+
+      <div
+          v-if="hoveredPoint"
+          class="spot-metric-trend-chart__tooltip"
+          :class="tooltipClass"
+          :style="tooltipStyle"
+      >
+        <div class="spot-metric-trend-chart__tooltip-time">{{ formatTooltipTime(hoveredPoint.timestamp) }}</div>
+        <div class="spot-metric-trend-chart__tooltip-grid">
+          <span>数值</span>
+          <strong>{{ formatValue(hoveredPoint.value) }}</strong>
+        </div>
+      </div>
     </div>
 
     <div v-else class="spot-metric-trend-chart__empty">
@@ -359,6 +454,7 @@ function formatAxisTime(timestamp: number) {
 }
 
 .spot-metric-trend-chart__canvas {
+  position: relative;
   height: 300px;
 }
 
@@ -396,6 +492,17 @@ function formatAxisTime(timestamp: number) {
   stroke-width: 3;
 }
 
+.spot-metric-trend-chart__crosshair-line {
+  stroke: rgba(15, 23, 42, 0.14);
+  stroke-width: 1.2;
+  stroke-dasharray: 4 5;
+}
+
+.spot-metric-trend-chart__crosshair-line--horizontal {
+  stroke: currentColor;
+  opacity: 0.4;
+}
+
 .spot-metric-trend-chart__last-line {
   stroke: currentColor;
   stroke-width: 1.2;
@@ -422,5 +529,50 @@ function formatAxisTime(timestamp: number) {
   border-radius: 24px;
   color: rgba(71, 85, 105, 0.86);
   background: rgba(248, 250, 252, 0.82);
+}
+
+.spot-metric-trend-chart__tooltip {
+  position: absolute;
+  min-width: 148px;
+  padding: 12px 14px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 18px;
+  background: rgba(15, 23, 42, 0.92);
+  color: #f8fafc;
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.18);
+  pointer-events: none;
+  transform: translate(-50%, calc(-100% - 12px));
+}
+
+.spot-metric-trend-chart__tooltip--left {
+  transform: translate(calc(-100% - 14px), calc(-100% - 12px));
+}
+
+.spot-metric-trend-chart__tooltip--right {
+  transform: translate(14px, calc(-100% - 12px));
+}
+
+.spot-metric-trend-chart__tooltip-time {
+  margin-bottom: 10px;
+  color: rgba(226, 232, 240, 0.82);
+  font-size: 11px;
+}
+
+.spot-metric-trend-chart__tooltip-grid {
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 6px 12px;
+  align-items: center;
+}
+
+.spot-metric-trend-chart__tooltip-grid span {
+  color: rgba(203, 213, 225, 0.82);
+  font-size: 11px;
+}
+
+.spot-metric-trend-chart__tooltip-grid strong {
+  color: #ffffff;
+  font-size: 12px;
+  text-align: right;
 }
 </style>

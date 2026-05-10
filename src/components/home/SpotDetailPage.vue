@@ -62,25 +62,32 @@ const headlinePrice = computed(() => {
   return candleSummary.value?.close ?? 0
 })
 const trendIsPositive = computed(() => Number(currentTicker.value?.priceChangePercentage ?? candleSummary.value?.changePercentage ?? 0) >= 0)
+const dayChangePercent = computed(() => Number(currentTicker.value?.priceChangePercentage ?? candleSummary.value?.changePercentage ?? 0))
+const heroTrendLabel = computed(() => trendIsPositive.value ? '结构偏强' : '结构承压')
+const heroTrendDescription = computed(() => trendIsPositive.value
+    ? '先看区间位置，再看振幅与成交量是否继续确认。'
+    : '先看回撤结构，再看低点支撑与成交量是否出现修复。'
+)
+const headlinePriceLabel = computed(() => formatPrice(headlinePrice.value))
+const dayChangeLabel = computed(() => formatSignedPercent(dayChangePercent.value))
 
 const marketInfoCards = computed(() => {
   const ticker = currentTicker.value
   const summary = candleSummary.value
-  const dayChange = ticker ? Number(ticker.priceChangePercentage) : null
 
   return [
     {
-      label: '当前价格',
-      value: formatPrice(headlinePrice.value),
-      accent: trendIsPositive.value ? 'up' : 'down'
+      label: '24H 最高价',
+      value: formatPrice(Number(ticker?.high ?? 0)),
+      accent: 'neutral'
     },
     {
-      label: '24 小时涨跌',
-      value: dayChange === null ? '--' : formatSignedPercent(dayChange),
-      accent: dayChange === null ? 'neutral' : (dayChange >= 0 ? 'up' : 'down')
+      label: '24H 最低价',
+      value: formatPrice(Number(ticker?.low ?? 0)),
+      accent: 'neutral'
     },
     {
-      label: `${intervalLabel.value}区间涨跌`,
+      label: `${intervalLabel.value}涨跌`,
       value: summary ? formatSignedPercent(summary.changePercentage) : '--',
       accent: (summary?.changePercentage ?? 0) >= 0 ? 'up' : 'down'
     },
@@ -102,11 +109,11 @@ const infoRows = computed(() => {
     {label: '数据源', value: sourceLabel.value},
     {label: '流通市值', value: formatCompactNumber(snapshot?.marketCap ?? 0), metricKind: 'market_cap' as const},
     {label: '市值排名', value: snapshot?.rank ? `#${snapshot.rank}` : '--'},
-    {label: '24h 成交量', value: formatCompactNumber(Number(ticker?.volume ?? 0)), metricKind: 'volume' as const},
-    {label: '24h 成交额', value: formatCompactNumber(Number(ticker?.volumeInUSDT ?? 0)), metricKind: 'quote_volume' as const},
-    {label: '24h 开盘价', value: formatPrice(Number(ticker?.open ?? 0))},
-    {label: '24h 最高价', value: formatPrice(Number(ticker?.high ?? 0))},
-    {label: '24h 最低价', value: formatPrice(Number(ticker?.low ?? 0))},
+    {label: '24H 成交量', value: formatCompactNumber(Number(ticker?.volume ?? 0)), metricKind: 'volume' as const},
+    {label: '24H 成交额', value: formatCompactNumber(Number(ticker?.volumeInUSDT ?? 0)), metricKind: 'quote_volume' as const},
+    {label: '24H 开盘价', value: formatPrice(Number(ticker?.open ?? 0))},
+    {label: '24H 最高价', value: formatPrice(Number(ticker?.high ?? 0))},
+    {label: '24H 最低价', value: formatPrice(Number(ticker?.low ?? 0))},
     {label: '流通量', value: formatCompactNumber(snapshot?.circulatingSupply ?? 0)},
     {label: `${intervalLabel.value}区间最高`, value: summary ? formatPrice(summary.high) : '--'},
     {label: `${intervalLabel.value}区间最低`, value: summary ? formatPrice(summary.low) : '--'},
@@ -142,12 +149,60 @@ const metricActionCards = computed(() => {
     }
   ]
 })
+const summaryInfoCards = computed(() => {
+  const ticker = currentTicker.value
+  const snapshot = marketSnapshot.value
+
+  return [
+    {
+      key: 'market_cap' as const,
+      label: '流通市值',
+      value: formatCompactNumber(snapshot?.marketCap ?? 0),
+      detail: snapshot?.rank ? `排名 #${snapshot.rank}` : '公开指标快照'
+    },
+    {
+      key: 'volume' as const,
+      label: '24H 成交量',
+      value: formatCompactNumber(Number(ticker?.volume ?? 0)),
+      detail: '点击切到成交量曲线'
+    },
+    {
+      key: 'quote_volume' as const,
+      label: '24H 成交额',
+      value: formatCompactNumber(Number(ticker?.volumeInUSDT ?? 0)),
+      detail: '点击切到成交额曲线'
+    }
+  ]
+})
+const detailInfoRows = computed(() => {
+  const hiddenLabels = new Set(['流通市值', '市值排名', '24H 成交量', '24H 成交额'])
+  return infoRows.value.filter((item) => !hiddenLabels.has(item.label))
+})
+const heroMetaCards = computed(() => {
+  return [
+    {
+      label: '数据源',
+      value: sourceLabel.value,
+      note: '实时行情口径'
+    },
+    {
+      label: '观察周期',
+      value: intervalDescription.value,
+      note: '主图与成交统计口径'
+    },
+    {
+      label: '最近刷新',
+      value: updateTimeLabel.value,
+      note: '本次 K 线更新时间'
+    }
+  ]
+})
 
 const chartTitle = computed(() => selectedInterval.value === 'all'
     ? `${coin.value} / USDT 全部走势（月线聚合）`
     : `${coin.value} / USDT ${intervalLabel.value} K 线`
 )
-const headerTagLabel = computed(() => trendIsPositive.value ? '多头偏强' : '空头偏强')
+const headerTagLabel = computed(() => trendIsPositive.value ? '方向偏多' : '方向偏空')
 const updateTimeLabel = computed(() => refreshedAt.value ? formatDateTime(refreshedAt.value) : '暂未更新')
 const selectedMetricConfig = computed(() => {
   if (selectedMetricKind.value === 'market_cap') {
@@ -190,6 +245,15 @@ const selectedMetricValue = computed(() => {
     return Number(currentTicker.value?.volumeInUSDT ?? 0)
   }
   return Number(currentTicker.value?.volume ?? 0)
+})
+const selectedMetricValueLabel = computed(() => formatCompactNumber(selectedMetricValue.value))
+const candleChartRenderKey = computed(() => {
+  const lastCandle = candles.value[candles.value.length - 1]
+  return `${coin.value}-${selectedInterval.value}-${candles.value.length}-${lastCandle?.closeTime ?? 0}`
+})
+const metricChartRenderKey = computed(() => {
+  const lastPoint = selectedMetricPoints.value[selectedMetricPoints.value.length - 1]
+  return `${coin.value}-${selectedMetricKind.value}-${selectedMarketCapInterval.value}-${selectedMetricPoints.value.length}-${lastPoint?.timestamp ?? 0}`
 })
 
 async function loadCandles(forceRefresh = false) {
@@ -350,32 +414,71 @@ onMounted(() => {
           <div class="spot-detail-page__headline-top">
             <span class="spot-detail-page__source-pill">{{ sourceLabel }}</span>
             <span class="spot-detail-page__source-pill spot-detail-page__source-pill--muted">{{ headerTagLabel }}</span>
+            <span class="spot-detail-page__source-pill spot-detail-page__source-pill--soft">{{ heroTrendLabel }}</span>
           </div>
           <h1>{{ coin }} / USDT</h1>
-          <p>实时行情复用首页后台连接，详情页单独拉取常见周期 K 线，并补充市值、成交量和成交额的扩展走势。</p>
+          <p>实时行情复用首页后台连接，详情页单独拉取常见周期 K 线，并补充市值、成交量和成交额走势。</p>
+
+          <div class="spot-detail-page__hero-price-row">
+            <div class="spot-detail-page__hero-price-block">
+              <span class="spot-detail-page__eyebrow spot-detail-page__eyebrow--hero">最新价格</span>
+              <strong>{{ headlinePriceLabel }}</strong>
+            </div>
+
+            <div
+                class="spot-detail-page__hero-change-pill"
+                :class="trendIsPositive ? 'spot-detail-page__hero-change-pill--up' : 'spot-detail-page__hero-change-pill--down'"
+            >
+              <span>24H 涨跌</span>
+              <strong>{{ dayChangeLabel }}</strong>
+            </div>
+          </div>
+
+          <div class="spot-detail-page__hero-meta-grid">
+            <article
+                v-for="item in heroMetaCards"
+                :key="item.label"
+                class="spot-detail-page__hero-meta-card"
+            >
+              <span>{{ item.label }}</span>
+              <strong>{{ item.value }}</strong>
+              <small>{{ item.note }}</small>
+            </article>
+          </div>
         </div>
       </div>
 
-      <div class="spot-detail-page__hero-stats">
-        <article
-            v-for="card in marketInfoCards"
-            :key="card.label"
-            class="spot-detail-page__hero-card"
-            :class="`spot-detail-page__hero-card--${card.accent}`"
-        >
-          <span>{{ card.label }}</span>
-          <strong>{{ card.value }}</strong>
-        </article>
+      <div class="spot-detail-page__hero-side">
+        <div class="spot-detail-page__hero-side-header">
+          <span class="spot-detail-page__eyebrow spot-detail-page__eyebrow--hero">关键观察</span>
+          <p>{{ heroTrendDescription }}</p>
+        </div>
+
+        <div class="spot-detail-page__hero-stats">
+          <article
+              v-for="card in marketInfoCards"
+              :key="card.label"
+              class="spot-detail-page__hero-card"
+              :class="`spot-detail-page__hero-card--${card.accent}`"
+          >
+            <span>{{ card.label }}</span>
+            <strong>{{ card.value }}</strong>
+          </article>
+        </div>
       </div>
     </section>
 
     <section class="spot-detail-page__content">
       <div class="spot-detail-page__chart-column">
-        <div class="spot-detail-page__chart-panel">
+        <div
+            class="spot-detail-page__chart-panel"
+            :class="{'spot-detail-page__panel--updating': loading}"
+        >
           <div class="spot-detail-page__chart-toolbar">
-            <div class="spot-detail-page__price-block">
-              <span class="spot-detail-page__eyebrow">最新价</span>
-              <strong>{{ formatPrice(headlinePrice) }}</strong>
+            <div class="spot-detail-page__section-copy">
+              <span class="spot-detail-page__eyebrow">价格主图</span>
+              <h2>价格结构</h2>
+              <p>先看位置与方向，再看区间振幅和收盘位置，判断当前节奏。</p>
             </div>
 
             <div class="spot-detail-page__intervals">
@@ -401,11 +504,14 @@ onMounted(() => {
           />
 
           <a-spin :spinning="loading">
-            <SpotCandleChart
-                :candles="candles"
-                :title="chartTitle"
-                :coin="coin"
-            />
+            <transition name="detail-chart-fade" mode="out-in">
+              <SpotCandleChart
+                  :key="candleChartRenderKey"
+                  :candles="candles"
+                  :title="chartTitle"
+                  :coin="coin"
+              />
+            </transition>
           </a-spin>
 
           <div class="spot-detail-page__footer-meta">
@@ -414,11 +520,15 @@ onMounted(() => {
           </div>
         </div>
 
-        <div class="spot-detail-page__metric-panel">
+        <div
+            class="spot-detail-page__metric-panel"
+            :class="{'spot-detail-page__panel--updating': marketCapTrendLoading || metricsLoading}"
+        >
           <div class="spot-detail-page__metric-header">
-            <div>
+            <div class="spot-detail-page__section-copy">
               <span class="spot-detail-page__eyebrow">扩展指标</span>
-              <h2>点一下，就能看走势</h2>
+              <h2>成交与市值</h2>
+              <p>切换不同观察维度，确认价格背后的成交变化与估值变化。</p>
             </div>
             <a-button
                 v-if="selectedMetricKind === 'market_cap'"
@@ -448,9 +558,12 @@ onMounted(() => {
           </div>
 
           <div class="spot-detail-page__metric-toolbar">
-            <span class="spot-detail-page__metric-toolbar-note">
-              当前指标：{{ selectedMetricConfig.title }}
-            </span>
+            <div class="spot-detail-page__metric-current">
+              <span class="spot-detail-page__metric-toolbar-note">
+                当前指标：{{ selectedMetricConfig.title }}
+              </span>
+              <strong>{{ selectedMetricValueLabel }}</strong>
+            </div>
 
             <a-segmented
                 v-if="selectedMetricKind === 'market_cap'"
@@ -476,13 +589,16 @@ onMounted(() => {
           />
 
           <a-spin :spinning="marketCapTrendLoading || metricsLoading">
-            <SpotMetricTrendChart
-                :coin="coin"
-                :title="selectedMetricConfig.title"
-                :subtitle="selectedMetricConfig.subtitle"
-                :points="selectedMetricPoints"
-                :accent="selectedMetricConfig.accent"
-            />
+            <transition name="detail-chart-fade" mode="out-in">
+              <SpotMetricTrendChart
+                  :key="metricChartRenderKey"
+                  :coin="coin"
+                  :title="selectedMetricConfig.title"
+                  :subtitle="selectedMetricConfig.subtitle"
+                  :points="selectedMetricPoints"
+                  :accent="selectedMetricConfig.accent"
+              />
+            </transition>
           </a-spin>
 
           <div class="spot-detail-page__footer-meta">
@@ -491,7 +607,7 @@ onMounted(() => {
               观察区间：{{ selectedMarketCapInterval.toUpperCase() }}
             </span>
             <span v-else>
-              量能曲线跟随上方 K 线周期切换
+              成交曲线跟随上方 K 线周期切换
             </span>
           </div>
         </div>
@@ -499,15 +615,30 @@ onMounted(() => {
 
       <div class="spot-detail-page__info-panel">
         <div class="spot-detail-page__info-header">
-          <div>
+          <div class="spot-detail-page__section-copy">
             <span class="spot-detail-page__eyebrow">市场摘要</span>
-            <h2>这个币当前最常看的信息</h2>
+            <h2>终端摘要</h2>
+            <p>先看关键快照，再按交易、区间和供给信息继续展开。</p>
           </div>
+        </div>
+
+        <div class="spot-detail-page__summary-grid">
+          <button
+              v-for="item in summaryInfoCards"
+              :key="item.label"
+              type="button"
+              class="spot-detail-page__summary-card"
+              @click="handleSelectMetric(item.key)"
+          >
+            <span>{{ item.label }}</span>
+            <strong>{{ item.value }}</strong>
+            <small>{{ item.detail }}</small>
+          </button>
         </div>
 
         <div class="spot-detail-page__info-grid">
           <article
-              v-for="item in infoRows"
+              v-for="item in detailInfoRows"
               :key="item.label"
               class="spot-detail-page__info-card"
               :class="{'spot-detail-page__info-card--interactive': item.metricKind}"
@@ -552,6 +683,25 @@ onMounted(() => {
   gap: 20px;
 }
 
+.spot-detail-page__hero-side {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.spot-detail-page__hero-side-header {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 18px 18px 0;
+}
+
+.spot-detail-page__hero-side-header p {
+  color: rgba(226, 232, 240, 0.82);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
 .spot-detail-page__back-button {
   width: fit-content;
   color: rgba(241, 245, 249, 0.92);
@@ -583,6 +733,10 @@ onMounted(() => {
   background: rgba(15, 23, 42, 0.2);
 }
 
+.spot-detail-page__source-pill--soft {
+  background: rgba(125, 211, 252, 0.16);
+}
+
 .spot-detail-page__headline h1 {
   margin-bottom: 10px;
   color: #f8fafc;
@@ -597,6 +751,127 @@ onMounted(() => {
   font-size: 15px;
 }
 
+.spot-detail-page__hero-price-row {
+  display: flex;
+  align-items: stretch;
+  gap: 16px;
+  margin-top: 24px;
+  margin-bottom: 18px;
+}
+
+.spot-detail-page__hero-price-block,
+.spot-detail-page__hero-change-pill {
+  min-height: 118px;
+}
+
+.spot-detail-page__hero-price-block {
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 10px;
+  padding: 20px 22px;
+  border-radius: 24px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.14);
+  backdrop-filter: blur(14px);
+}
+
+.spot-detail-page__eyebrow.spot-detail-page__eyebrow--hero {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.28);
+  color: #ffffff;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-shadow: 0 1px 2px rgba(15, 23, 42, 0.3);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+.spot-detail-page__hero-price-block strong {
+  color: #ffffff;
+  font-size: 42px;
+  line-height: 1;
+  letter-spacing: -0.05em;
+}
+
+.spot-detail-page__hero-change-pill {
+  min-width: 180px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 8px;
+  padding: 20px 22px;
+  border-radius: 24px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(14px);
+}
+
+.spot-detail-page__hero-change-pill span {
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.spot-detail-page__hero-change-pill strong {
+  font-size: 32px;
+  line-height: 1;
+}
+
+.spot-detail-page__hero-change-pill--up {
+  background: linear-gradient(180deg, rgba(22, 163, 74, 0.2), rgba(15, 23, 42, 0.08));
+}
+
+.spot-detail-page__hero-change-pill--up strong {
+  color: #86efac;
+}
+
+.spot-detail-page__hero-change-pill--down {
+  background: linear-gradient(180deg, rgba(220, 38, 38, 0.18), rgba(15, 23, 42, 0.08));
+}
+
+.spot-detail-page__hero-change-pill--down strong {
+  color: #fda4af;
+}
+
+.spot-detail-page__hero-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.spot-detail-page__hero-meta-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px 18px 18px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 22px;
+  background: rgba(15, 23, 42, 0.14);
+}
+
+.spot-detail-page__hero-meta-card span {
+  color: rgba(226, 232, 240, 0.74);
+  font-size: 12px;
+}
+
+.spot-detail-page__hero-meta-card strong {
+  color: #ffffff;
+  font-size: 18px;
+  line-height: 1.2;
+}
+
+.spot-detail-page__hero-meta-card small {
+  color: rgba(203, 213, 225, 0.76);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 .spot-detail-page__hero-stats {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -609,6 +884,7 @@ onMounted(() => {
   gap: 10px;
   padding: 18px 18px 20px;
   border-radius: 24px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
   background: rgba(255, 255, 255, 0.1);
   color: #f8fafc;
   backdrop-filter: blur(14px);
@@ -616,7 +892,7 @@ onMounted(() => {
 
 .spot-detail-page__hero-card span {
   font-size: 13px;
-  color: rgba(226, 232, 240, 0.82);
+  color: rgba(255, 255, 255, 0.82);
 }
 
 .spot-detail-page__hero-card strong {
@@ -648,15 +924,43 @@ onMounted(() => {
   gap: 22px;
 }
 
+.spot-detail-page__info-panel {
+  position: sticky;
+  top: 24px;
+  align-self: start;
+}
+
 .spot-detail-page__chart-panel,
 .spot-detail-page__metric-panel,
 .spot-detail-page__info-panel {
+  position: relative;
   padding: 24px;
   border: 1px solid rgba(148, 163, 184, 0.18);
   border-radius: 28px;
   background: rgba(255, 255, 255, 0.78);
   box-shadow: 0 22px 56px rgba(15, 23, 42, 0.08);
   backdrop-filter: blur(10px);
+}
+
+.spot-detail-page__chart-panel::before,
+.spot-detail-page__metric-panel::before,
+.spot-detail-page__info-panel::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.38), rgba(255, 255, 255, 0));
+}
+
+.spot-detail-page__panel--updating {
+  transition:
+      box-shadow 0.22s ease,
+      transform 0.22s ease,
+      border-color 0.22s ease,
+      background 0.22s ease;
+  border-color: rgba(14, 165, 233, 0.18);
+  box-shadow: 0 24px 60px rgba(14, 165, 233, 0.08);
 }
 
 .spot-detail-page__chart-toolbar,
@@ -669,15 +973,33 @@ onMounted(() => {
   margin-bottom: 18px;
 }
 
-.spot-detail-page__price-block {
+.spot-detail-page__section-copy {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
 }
 
-.spot-detail-page__price-block strong {
+.spot-detail-page__section-copy h2 {
   color: #0f172a;
-  font-size: 34px;
+  font-size: 30px;
+  line-height: 1.05;
+}
+
+.spot-detail-page__section-copy p {
+  color: rgba(71, 85, 105, 0.8);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.spot-detail-page__metric-current {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.spot-detail-page__metric-current strong {
+  color: #0f172a;
+  font-size: 24px;
   line-height: 1;
 }
 
@@ -737,7 +1059,7 @@ onMounted(() => {
 .spot-detail-page__metric-card:hover,
 .spot-detail-page__metric-card--active {
   border-color: rgba(14, 165, 233, 0.24);
-  transform: translateY(-1px);
+  transform: translateY(-1px) scale(1.01);
   box-shadow: 0 16px 36px rgba(14, 165, 233, 0.1);
 }
 
@@ -764,6 +1086,65 @@ onMounted(() => {
 
 .spot-detail-page__info-header {
   margin-bottom: 20px;
+}
+
+.spot-detail-page__summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.spot-detail-page__summary-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 18px;
+  border: 1px solid rgba(191, 219, 254, 0.7);
+  border-radius: 22px;
+  background:
+      linear-gradient(180deg, rgba(239, 246, 255, 0.9), rgba(255, 255, 255, 0.82));
+  text-align: left;
+  transition:
+      border-color 0.2s ease,
+      transform 0.2s ease,
+      box-shadow 0.2s ease;
+  cursor: pointer;
+}
+
+.spot-detail-page__summary-card:hover {
+  border-color: rgba(59, 130, 246, 0.26);
+  transform: translateY(-1px);
+  box-shadow: 0 16px 36px rgba(59, 130, 246, 0.1);
+}
+
+.spot-detail-page__summary-card span {
+  color: rgba(71, 85, 105, 0.82);
+  font-size: 13px;
+}
+
+.spot-detail-page__summary-card strong {
+  color: #0f172a;
+  font-size: 24px;
+  line-height: 1.05;
+}
+
+.spot-detail-page__summary-card small {
+  color: rgba(71, 85, 105, 0.72);
+  font-size: 12px;
+}
+
+.detail-chart-fade-enter-active,
+.detail-chart-fade-leave-active {
+  transition:
+      opacity 0.18s ease,
+      transform 0.18s ease;
+}
+
+.detail-chart-fade-enter-from,
+.detail-chart-fade-leave-to {
+  opacity: 0;
+  transform: translateY(6px);
 }
 
 .spot-detail-page__eyebrow {
@@ -826,8 +1207,15 @@ onMounted(() => {
     grid-template-columns: 1fr;
   }
 
+  .spot-detail-page__info-panel {
+    position: relative;
+    top: auto;
+  }
+
+  .spot-detail-page__hero-meta-grid,
+  .spot-detail-page__summary-grid,
   .spot-detail-page__metric-card-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
@@ -849,8 +1237,14 @@ onMounted(() => {
   }
 
   .spot-detail-page__hero-stats,
+  .spot-detail-page__hero-meta-grid,
+  .spot-detail-page__summary-grid,
   .spot-detail-page__info-grid {
     grid-template-columns: 1fr;
+  }
+
+  .spot-detail-page__hero-price-row {
+    flex-direction: column;
   }
 
   .spot-detail-page__chart-toolbar,
@@ -864,6 +1258,10 @@ onMounted(() => {
   .spot-detail-page__intervals {
     width: 100%;
     justify-content: flex-start;
+  }
+
+  .spot-detail-page__metric-card-grid {
+    grid-template-columns: 1fr;
   }
 }
 </style>
