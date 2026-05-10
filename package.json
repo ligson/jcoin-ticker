@@ -1,7 +1,7 @@
 {
   "name": "jcoin-ticker",
   "private": true,
-  "version": "0.0.34",
+  "version": "0.0.35",
   "description": "一个基于 Electron 的桌面现货盯盘工具。",
   "author": "ligson",
   "type": "module",

@@ -2,6 +2,15 @@ import {createRouter, createWebHistory} from "vue-router";
 // 两种方式引入页面
 const routes = [
     {
+        path: '/',
+        redirect: '/home'
+    },
+    {
+        path: '/home/:coin',
+        name: 'coin-detail',
+        component: () => import("../components/home/SpotDetailPage.vue")
+    },
+    {
         path: '/home',
         name: 'home',
         component: () => import("../components/home/HomePage.vue")

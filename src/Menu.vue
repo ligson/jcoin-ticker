@@ -1,7 +1,7 @@
 <script setup lang="ts">
 
-import {h, onMounted, ref} from "vue";
-import {useRouter} from "vue-router";
+import {computed, h, ref, watch} from "vue";
+import {useRoute, useRouter} from "vue-router";
 import {MenuProps} from "ant-design-vue";
 import {DollarCircleOutlined, SettingOutlined} from '@ant-design/icons-vue';
 
@@ -29,19 +29,28 @@ const menuOptions = ref<MenuProps['items']>([
   }
 ])
 const router = useRouter()
+const route = useRoute()
+
+const currentTopLevelKey = computed(() => {
+  if (route.path.startsWith('/setting')) {
+    return 'setting'
+  }
+  if (route.path.startsWith('/help')) {
+    return 'help'
+  }
+  return 'home'
+})
+
 // 添加菜单项点击处理函数
 const handleMenuSelect: MenuProps['onClick'] = e => {
-  console.log('点击的菜单项 key:', e.key);
   activeKey.value = [e.key + ""];
   router.push("/" + e.key + "")
 };
 
-
-onMounted(() => {
-  // 页面加载时初始化路由
-  if (activeKey.value) {
-    router.push('/' + activeKey.value[0]);
-  }
+watch(currentTopLevelKey, (value) => {
+  activeKey.value = [value]
+}, {
+  immediate: true
 })
 
 </script>

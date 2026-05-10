@@ -30,6 +30,12 @@ Renderer 源码目录。
 - `config/router.ts`：路由注册与路径配置。
 - `config/store.ts`：Renderer 侧访问 preload 暴露的存储接口。
 - `components/home/`：实时行情列表界面与可切换的现货数据源适配层。
+- `components/home/SpotDetailPage.vue`：币种详情页，展示常见周期、全部走势 K 线和市场摘要。
+- `components/home/SpotCandleChart.vue`：详情页使用的 K 线图表组件。
+- `components/home/SpotMetricTrendChart.vue`：详情页扩展指标走势组件，用于显示市值、成交量、成交额曲线。
+- `components/home/MarketSentimentPanel.vue`：首页全局市场情绪指数面板。
+- `components/home/marketSentiment.ts`：首页市场情绪数据访问，负责读取 Alternative.me Fear & Greed Index 历史数据。
+- `components/home/spotAssetMetrics.ts`：详情页辅助指标数据访问，负责读取公开市值与市值历史数据。
 - `components/home/spotTickerRuntime.ts`：全局后台现货行情运行时，负责跨页面复用实时连接。
 - `components/setting/`：设置页壳与各个设置子页面。
 - `components/help/`：帮助页，占位状态。
@@ -63,6 +69,8 @@ Electron 相关生成产物目录，可用于运行和打包流程。
 ## 关键文件定位
 
 - 实时行情界面：`src/components/home/HomePage.vue`
+- 币种详情页：`src/components/home/SpotDetailPage.vue`
+- K 线图表组件：`src/components/home/SpotCandleChart.vue`
 - 现货数据源适配层：`src/components/home/spotMarketDataSources.ts`
 - 后台现货行情运行时：`src/components/home/spotTickerRuntime.ts`
 - 币种设置页面：`src/components/setting/pages/tickercoin/TickerCoinPage.vue`

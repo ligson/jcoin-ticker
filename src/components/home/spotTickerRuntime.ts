@@ -1,10 +1,11 @@
 import {ref} from "vue";
 import store from "../../config/store.ts";
-import {AppConfig, normalizeAppConfig} from "../config/config.ts";
+import {AppConfig, MarketDataSource, normalizeAppConfig} from "../config/config.ts";
 import {CoinPrice, createSpotTickerClient, SpotTickerClient} from "./spotMarketDataSources.ts";
 
 export const runtimeCoinPrices = ref<CoinPrice[]>([])
 export const runtimeCoins = ref<string[]>([])
+export const runtimeMarketDataSource = ref<MarketDataSource>('binance_spot')
 export const runtimeReady = ref(false)
 
 let tickerClient: SpotTickerClient | null = null
@@ -22,6 +23,31 @@ const createEmptyCoinPrices = (coins: string[]) => {
         volume: "0.00",
         volumeInUSDT: "0.00"
     }))
+}
+
+const hasSameCoins = (currentCoins: string[], nextCoins: string[]) => {
+    if (currentCoins.length !== nextCoins.length) {
+        return false
+    }
+
+    const currentSet = new Set(currentCoins)
+    return nextCoins.every((coin) => currentSet.has(coin))
+}
+
+const reorderCoinPrices = (coins: string[], currentPrices: CoinPrice[]) => {
+    return coins.map((coin) => {
+        const existing = currentPrices.find((item) => item.coin === coin)
+        return existing ?? {
+            coin,
+            price: "0.00",
+            open: "0.00",
+            high: "0.00",
+            low: "0.00",
+            priceChangePercentage: "0.00",
+            volume: "0.00",
+            volumeInUSDT: "0.00"
+        }
+    })
 }
 
 const buildRuntimeSignature = (appConfig: AppConfig) => {
@@ -58,8 +84,20 @@ const bindTickerMessages = (coins: string[]) => {
 export const applySpotTickerRuntimeConfig = async (config: AppConfig) => {
     const appConfig = normalizeAppConfig(config)
     const nextSignature = buildRuntimeSignature(appConfig)
+    const orderOnlyChanged = runtimeReady.value
+        && runtimeMarketDataSource.value === appConfig.marketDataSource
+        && lastRuntimeSignature !== nextSignature
+        && hasSameCoins(runtimeCoins.value, appConfig.coins)
 
     runtimeCoins.value = [...appConfig.coins]
+    runtimeMarketDataSource.value = appConfig.marketDataSource
+
+    if (orderOnlyChanged) {
+        runtimeCoinPrices.value = reorderCoinPrices(appConfig.coins, runtimeCoinPrices.value)
+        lastRuntimeSignature = nextSignature
+        runtimeReady.value = true
+        return
+    }
 
     if (lastRuntimeSignature !== nextSignature) {
         runtimeCoinPrices.value = createEmptyCoinPrices(appConfig.coins)

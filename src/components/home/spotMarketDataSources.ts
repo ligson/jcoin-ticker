@@ -19,6 +19,31 @@ export interface TickerSymbolOption {
     quoteAsset: string;
 }
 
+export type SpotCandleInterval = '15m' | '1h' | '1d' | '1w' | '1M' | 'all'
+
+export interface SpotCandle {
+    openTime: number;
+    closeTime: number;
+    open: number;
+    high: number;
+    low: number;
+    close: number;
+    volume: number;
+    quoteVolume: number;
+}
+
+export interface SpotCandleSummary {
+    open: number;
+    close: number;
+    high: number;
+    low: number;
+    volume: number;
+    quoteVolume: number;
+    changePercentage: number;
+    amplitudePercentage: number;
+    averageClose: number;
+}
+
 export interface SpotTickerClient {
     setMessageCallback(callback: (coinPrice: CoinPrice) => void): void;
     close(): void;
@@ -26,9 +51,46 @@ export interface SpotTickerClient {
 
 const RECONNECT_INTERVAL = 5000
 const BINANCE_SPOT_WS_PREFIX = 'wss://data-stream.binance.vision/stream?streams='
+const BINANCE_SPOT_REST_URL = 'https://data-api.binance.vision/api/v3'
 const OKX_SPOT_WS_URL = 'wss://ws.okx.com:8443/ws/v5/public'
+const OKX_SPOT_REST_URL = 'https://www.okx.com/api/v5'
 const KRAKEN_SPOT_WS_URL = 'wss://ws.kraken.com/v2'
+const KRAKEN_SPOT_REST_URL = 'https://api.kraken.com/0/public'
 const COINBASE_SPOT_WS_URL = 'wss://ws-feed.exchange.coinbase.com'
+const COINBASE_SPOT_REST_URL = 'https://api.exchange.coinbase.com'
+const SPOT_CANDLE_CACHE_TTL_MS = 2 * 60 * 1000
+const SPOT_CANDLE_TARGET_COUNTS: Record<SpotCandleInterval, number> = {
+    '15m': 96,
+    '1h': 120,
+    '1d': 90,
+    '1w': 52,
+    '1M': 12,
+    all: 240
+}
+
+const spotCandleCache = new Map<string, {updatedAt: number; candles: SpotCandle[]}>()
+
+export const spotCandleIntervalOptions: Array<{label: string; value: SpotCandleInterval}> = [
+    {label: '15 分钟', value: '15m'},
+    {label: '1 小时', value: '1h'},
+    {label: '日线', value: '1d'},
+    {label: '周线', value: '1w'},
+    {label: '月线', value: '1M'},
+    {label: '全部', value: 'all'}
+]
+
+const spotCandleIntervalLabelMap: Record<SpotCandleInterval, string> = {
+    '15m': '15 分钟',
+    '1h': '1 小时',
+    '1d': '日线',
+    '1w': '周线',
+    '1M': '月线',
+    all: '全部'
+}
+
+export const getSpotCandleIntervalLabel = (interval: SpotCandleInterval) => {
+    return spotCandleIntervalLabelMap[interval]
+}
 
 export const marketDataSourceOptions = [
     {
@@ -645,4 +707,531 @@ export const createSpotTickerClient = (source: MarketDataSource, coins: string[]
     }
 
     return new BinanceSpotTickerClient(coins)
+}
+
+const toNumber = (value: unknown) => {
+    const numberValue = Number(value)
+    return Number.isFinite(numberValue) ? numberValue : 0
+}
+
+const createSpotCandle = (
+    openTime: number,
+    closeTime: number,
+    open: unknown,
+    high: unknown,
+    low: unknown,
+    close: unknown,
+    volume: unknown,
+    quoteVolume: unknown
+): SpotCandle => {
+    return {
+        openTime,
+        closeTime,
+        open: toNumber(open),
+        high: toNumber(high),
+        low: toNumber(low),
+        close: toNumber(close),
+        volume: toNumber(volume),
+        quoteVolume: toNumber(quoteVolume)
+    }
+}
+
+const normalizeSpotCandles = (candles: SpotCandle[], targetCount?: number) => {
+    const deduplicated = new Map<number, SpotCandle>()
+
+    candles.forEach((candle) => {
+        if (!Number.isFinite(candle.openTime) || !Number.isFinite(candle.closeTime)) {
+            return
+        }
+        if (
+            [candle.open, candle.high, candle.low, candle.close, candle.volume, candle.quoteVolume]
+                .some((value) => !Number.isFinite(value))
+        ) {
+            return
+        }
+        deduplicated.set(candle.openTime, candle)
+    })
+
+    const sorted = [...deduplicated.values()].sort((first, second) => first.openTime - second.openTime)
+    if (!targetCount || sorted.length <= targetCount) {
+        return sorted
+    }
+    return sorted.slice(-targetCount)
+}
+
+const buildWeekBucketKey = (timestamp: number) => {
+    const date = new Date(timestamp)
+    const weekday = date.getUTCDay() || 7
+    date.setUTCHours(0, 0, 0, 0)
+    date.setUTCDate(date.getUTCDate() - weekday + 1)
+    return date.toISOString().slice(0, 10)
+}
+
+const buildMonthBucketKey = (timestamp: number) => {
+    const date = new Date(timestamp)
+    return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}`
+}
+
+const aggregateSpotCandles = (
+    candles: SpotCandle[],
+    bucketType: 'week' | 'month',
+    targetCount: number
+) => {
+    const grouped = new Map<string, SpotCandle[]>()
+
+    normalizeSpotCandles(candles).forEach((candle) => {
+        const bucketKey = bucketType === 'week'
+            ? buildWeekBucketKey(candle.openTime)
+            : buildMonthBucketKey(candle.openTime)
+        const bucket = grouped.get(bucketKey) ?? []
+        bucket.push(candle)
+        grouped.set(bucketKey, bucket)
+    })
+
+    const aggregated = [...grouped.values()].map((bucket) => {
+        const sortedBucket = bucket.sort((first, second) => first.openTime - second.openTime)
+        const first = sortedBucket[0]
+        const last = sortedBucket[sortedBucket.length - 1]
+        return createSpotCandle(
+            first.openTime,
+            last.closeTime,
+            first.open,
+            Math.max(...sortedBucket.map((item) => item.high)),
+            Math.min(...sortedBucket.map((item) => item.low)),
+            last.close,
+            sortedBucket.reduce((sum, item) => sum + item.volume, 0),
+            sortedBucket.reduce((sum, item) => sum + item.quoteVolume, 0)
+        )
+    })
+
+    return normalizeSpotCandles(aggregated, targetCount)
+}
+
+const ensureOk = async (response: Response, errorPrefix: string) => {
+    if (!response.ok) {
+        throw new Error(`${errorPrefix}：${response.status}`)
+    }
+}
+
+const fetchJson = async <T>(url: string, errorPrefix: string): Promise<T> => {
+    const response = await fetch(url)
+    await ensureOk(response, errorPrefix)
+    return await response.json() as T
+}
+
+const getSpotSymbolForSource = (source: MarketDataSource, coin: string) => {
+    const normalizedCoin = coin.toUpperCase()
+    if (source === 'okx_spot' || source === 'coinbase_spot') {
+        return `${normalizedCoin}-USDT`
+    }
+    if (source === 'kraken_spot') {
+        return `${normalizedCoin}/USDT`
+    }
+    return `${normalizedCoin}USDT`
+}
+
+const buildSpotCandleCacheKey = (source: MarketDataSource, coin: string, interval: SpotCandleInterval) => {
+    return `${source}:${coin.toUpperCase()}:${interval}`
+}
+
+const getSpotCandleIntervalDurationMs = (interval: SpotCandleInterval) => {
+    const durationMap: Record<SpotCandleInterval, number> = {
+        '15m': 15 * 60 * 1000,
+        '1h': 60 * 60 * 1000,
+        '1d': 24 * 60 * 60 * 1000,
+        '1w': 7 * 24 * 60 * 60 * 1000,
+        '1M': 30 * 24 * 60 * 60 * 1000,
+        all: 30 * 24 * 60 * 60 * 1000
+    }
+    return durationMap[interval]
+}
+
+const getCachedSpotCandles = (source: MarketDataSource, coin: string, interval: SpotCandleInterval) => {
+    const cache = spotCandleCache.get(buildSpotCandleCacheKey(source, coin, interval))
+    if (!cache) {
+        return null
+    }
+    if (Date.now() - cache.updatedAt > SPOT_CANDLE_CACHE_TTL_MS) {
+        spotCandleCache.delete(buildSpotCandleCacheKey(source, coin, interval))
+        return null
+    }
+    return cache.candles
+}
+
+const setCachedSpotCandles = (
+    source: MarketDataSource,
+    coin: string,
+    interval: SpotCandleInterval,
+    candles: SpotCandle[]
+) => {
+    spotCandleCache.set(buildSpotCandleCacheKey(source, coin, interval), {
+        updatedAt: Date.now(),
+        candles
+    })
+}
+
+const fetchBinanceSpotCandles = async (coin: string, interval: SpotCandleInterval) => {
+    const binanceIntervalMap: Record<SpotCandleInterval, string> = {
+        '15m': '15m',
+        '1h': '1h',
+        '1d': '1d',
+        '1w': '1w',
+        '1M': '1M',
+        all: '1M'
+    }
+    const limit = SPOT_CANDLE_TARGET_COUNTS[interval]
+    const symbol = getSpotSymbolForSource('binance_spot', coin)
+    const payload = await fetchJson<Array<Array<string | number>>>(
+        `${BINANCE_SPOT_REST_URL}/klines?symbol=${symbol}&interval=${binanceIntervalMap[interval]}&limit=${limit}`,
+        '获取 Binance K 线失败'
+    )
+
+    return normalizeSpotCandles(payload.map((item) => createSpotCandle(
+        toNumber(item[0]),
+        toNumber(item[6]),
+        item[1],
+        item[2],
+        item[3],
+        item[4],
+        item[5],
+        item[7]
+    )), limit)
+}
+
+const fetchOkxSpotCandles = async (coin: string, interval: SpotCandleInterval) => {
+    const okxIntervalMap: Record<SpotCandleInterval, string> = {
+        '15m': '15m',
+        '1h': '1H',
+        '1d': '1Dutc',
+        '1w': '1Wutc',
+        '1M': '1Mutc',
+        all: '1Mutc'
+    }
+    const limit = SPOT_CANDLE_TARGET_COUNTS[interval]
+    const symbol = getSpotSymbolForSource('okx_spot', coin)
+    const payload = await fetchJson<{data?: Array<Array<string | number>>}>(
+        `${OKX_SPOT_REST_URL}/market/history-candles?instId=${encodeURIComponent(symbol)}&bar=${okxIntervalMap[interval]}&limit=${limit}`,
+        '获取 OKX K 线失败'
+    )
+
+    const candles = Array.isArray(payload.data) ? payload.data : []
+    return normalizeSpotCandles(candles.map((item) => {
+        const baseVolume = toNumber(item[5])
+        const quoteVolume = toNumber(item[7] ?? item[6]) || (baseVolume * toNumber(item[4]))
+        return createSpotCandle(
+            toNumber(item[0]),
+            toNumber(item[0]) + getSpotCandleIntervalDurationMs(interval),
+            item[1],
+            item[2],
+            item[3],
+            item[4],
+            baseVolume,
+            quoteVolume
+        )
+    }), limit)
+}
+
+const fetchKrakenSpotCandlesByRest = async (coin: string, interval: SpotCandleInterval) => {
+    const krakenIntervalMap: Record<SpotCandleInterval, number> = {
+        '15m': 15,
+        '1h': 60,
+        '1d': 1440,
+        '1w': 10080,
+        '1M': 1440,
+        all: 21600
+    }
+    const pairCandidates = coin.toUpperCase() === 'BTC'
+        ? [`${coin}/USDT`, 'XBT/USDT', `${coin}USDT`, 'XBTUSDT']
+        : [`${coin}/USDT`, `${coin}USDT`]
+
+    for (const pair of pairCandidates) {
+        try {
+            const payload = await fetchJson<{error?: string[]; result?: Record<string, Array<Array<string | number>> | number>}>(
+                `${KRAKEN_SPOT_REST_URL}/OHLC?pair=${encodeURIComponent(pair)}&interval=${krakenIntervalMap[interval]}`,
+                '获取 Kraken K 线失败'
+            )
+
+            if (Array.isArray(payload.error) && payload.error.length > 0) {
+                continue
+            }
+
+            const result = payload.result ?? {}
+            const seriesEntry = Object.entries(result).find(([key, value]) => key !== 'last' && Array.isArray(value))
+            if (!seriesEntry) {
+                continue
+            }
+
+            const candles = (seriesEntry[1] as Array<Array<string | number>>).map((item) => {
+                const openTime = toNumber(item[0]) * 1000
+                const close = toNumber(item[4])
+                const volume = toNumber(item[6])
+                const vwap = toNumber(item[5])
+                const intervalDurationMs = krakenIntervalMap[interval] * 60 * 1000
+                return createSpotCandle(
+                    openTime,
+                    openTime + intervalDurationMs,
+                    item[1],
+                    item[2],
+                    item[3],
+                    close,
+                    volume,
+                    volume * (vwap || close)
+                )
+            })
+
+            return normalizeSpotCandles(
+                interval === '1M' || interval === 'all'
+                    ? aggregateSpotCandles(candles, 'month', SPOT_CANDLE_TARGET_COUNTS[interval])
+                    : candles,
+                SPOT_CANDLE_TARGET_COUNTS[interval]
+            )
+        } catch (_error) {
+            // 继续尝试下一个 pair 候选。
+        }
+    }
+
+    throw new Error('获取 Kraken K 线失败：未找到可用交易对')
+}
+
+const fetchKrakenSpotCandles = async (coin: string, interval: SpotCandleInterval) => {
+    const krakenIntervalMap: Record<Exclude<SpotCandleInterval, '1M' | 'all'>, number> = {
+        '15m': 15,
+        '1h': 60,
+        '1d': 1440,
+        '1w': 10080
+    }
+
+    if (interval === '1M' || interval === 'all') {
+        return await fetchKrakenSpotCandlesByRest(coin, interval)
+    }
+
+    try {
+        const candles = await new Promise<SpotCandle[]>((resolve, reject) => {
+            const webSocket = new WebSocket(KRAKEN_SPOT_WS_URL)
+            const timer = window.setTimeout(() => {
+                webSocket.close()
+                reject(new Error('通过 Kraken WebSocket 获取 K 线超时'))
+            }, 8000)
+
+            webSocket.onopen = () => {
+                webSocket.send(JSON.stringify({
+                    method: 'subscribe',
+                    params: {
+                        channel: 'ohlc',
+                        snapshot: true,
+                        symbol: [getSpotSymbolForSource('kraken_spot', coin)],
+                        interval: krakenIntervalMap[interval]
+                    }
+                }))
+            }
+
+            webSocket.onerror = () => {
+                window.clearTimeout(timer)
+                reject(new Error('通过 Kraken WebSocket 获取 K 线失败'))
+            }
+
+            webSocket.onmessage = (event) => {
+                const payload = JSON.parse(String(event.data))
+                if (payload?.channel !== 'ohlc' || payload?.type !== 'snapshot' || !Array.isArray(payload?.data)) {
+                    return
+                }
+
+                const snapshotCandles = payload.data.map((item: Record<string, unknown>) => {
+                    const openTime = Date.parse(String(item.interval_begin ?? item.timestamp ?? ''))
+                    const close = toNumber(item.close)
+                    const volume = toNumber(item.volume)
+                    const vwap = toNumber(item.vwap)
+                    return createSpotCandle(
+                        openTime,
+                        openTime + getSpotCandleIntervalDurationMs(interval),
+                        item.open,
+                        item.high,
+                        item.low,
+                        close,
+                        volume,
+                        volume * (vwap || close)
+                    )
+                })
+
+                window.clearTimeout(timer)
+                webSocket.close()
+                resolve(normalizeSpotCandles(snapshotCandles, SPOT_CANDLE_TARGET_COUNTS[interval]))
+            }
+        })
+
+        if (candles.length >= 10) {
+            return candles
+        }
+    } catch (_error) {
+        // 回退到 REST。
+    }
+
+    return await fetchKrakenSpotCandlesByRest(coin, interval)
+}
+
+const fetchCoinbaseCandlesWindow = async (
+    productId: string,
+    granularity: number,
+    startAt?: Date,
+    endAt?: Date
+) => {
+    const search = new URLSearchParams({
+        granularity: String(granularity)
+    })
+    if (startAt) {
+        search.set('start', startAt.toISOString())
+    }
+    if (endAt) {
+        search.set('end', endAt.toISOString())
+    }
+
+    const payload = await fetchJson<Array<Array<number>>>(
+        `${COINBASE_SPOT_REST_URL}/products/${encodeURIComponent(productId)}/candles?${search.toString()}`,
+        '获取 Coinbase K 线失败'
+    )
+
+    return normalizeSpotCandles(payload.map((item) => {
+        const openTime = toNumber(item[0]) * 1000
+        const close = toNumber(item[4])
+        const volume = toNumber(item[5])
+        return createSpotCandle(
+            openTime,
+            openTime + (granularity * 1000),
+            item[3],
+            item[2],
+            item[1],
+            close,
+            volume,
+            volume * close
+        )
+    }))
+}
+
+const fetchCoinbaseDailyCandles = async (coin: string, dailyCount: number) => {
+    const productId = getSpotSymbolForSource('coinbase_spot', coin)
+    const granularity = 86400
+    const candles: SpotCandle[] = []
+    let currentEnd = new Date()
+    let requestCount = 0
+
+    while (candles.length < dailyCount) {
+        requestCount += 1
+        if (requestCount > 40) {
+            break
+        }
+        const batchSize = Math.min(300, dailyCount - candles.length)
+        const currentStart = new Date(currentEnd.getTime() - (batchSize * granularity * 1000))
+        const batch = await fetchCoinbaseCandlesWindow(productId, granularity, currentStart, currentEnd)
+        if (batch.length === 0) {
+            break
+        }
+        candles.unshift(...batch)
+        const oldest = batch[0]
+        currentEnd = new Date(oldest.openTime - 1000)
+        if (batch.length < batchSize) {
+            break
+        }
+    }
+
+    return normalizeSpotCandles(candles)
+}
+
+const fetchCoinbaseSpotCandles = async (coin: string, interval: SpotCandleInterval) => {
+    const productId = getSpotSymbolForSource('coinbase_spot', coin)
+    if (interval === '1w') {
+        const dailyCandles = await fetchCoinbaseDailyCandles(coin, (SPOT_CANDLE_TARGET_COUNTS['1w'] * 7) + 14)
+        return aggregateSpotCandles(dailyCandles, 'week', SPOT_CANDLE_TARGET_COUNTS['1w'])
+    }
+
+    if (interval === '1M') {
+        const dailyCandles = await fetchCoinbaseDailyCandles(coin, 400)
+        return aggregateSpotCandles(dailyCandles, 'month', SPOT_CANDLE_TARGET_COUNTS['1M'])
+    }
+
+    if (interval === 'all') {
+        const dailyCandles = await fetchCoinbaseDailyCandles(coin, 9000)
+        return aggregateSpotCandles(dailyCandles, 'month', SPOT_CANDLE_TARGET_COUNTS.all)
+    }
+
+    const granularityMap: Record<'15m' | '1h' | '1d', number> = {
+        '15m': 900,
+        '1h': 3600,
+        '1d': 86400
+    }
+    const directInterval = interval as '15m' | '1h' | '1d'
+    const limit = SPOT_CANDLE_TARGET_COUNTS[directInterval]
+    const endAt = new Date()
+    const startAt = new Date(endAt.getTime() - (limit * granularityMap[directInterval] * 1000))
+    const candles = await fetchCoinbaseCandlesWindow(productId, granularityMap[directInterval], startAt, endAt)
+    return normalizeSpotCandles(candles, limit)
+}
+
+const fetchSpotCandlesUncached = async (source: MarketDataSource, coin: string, interval: SpotCandleInterval) => {
+    if (source === 'coinbase_spot') {
+        return await fetchCoinbaseSpotCandles(coin, interval)
+    }
+
+    if (source === 'kraken_spot') {
+        return await fetchKrakenSpotCandles(coin, interval)
+    }
+
+    if (source === 'okx_spot') {
+        return await fetchOkxSpotCandles(coin, interval)
+    }
+
+    return await fetchBinanceSpotCandles(coin, interval)
+}
+
+export const fetchSpotCandles = async (
+    source: MarketDataSource,
+    coin: string,
+    interval: SpotCandleInterval,
+    forceRefresh = false
+) => {
+    if (!forceRefresh) {
+        const cached = getCachedSpotCandles(source, coin, interval)
+        if (cached) {
+            return cached
+        }
+    }
+
+    const candles = await fetchSpotCandlesUncached(source, coin, interval)
+    if (candles.length === 0) {
+        throw new Error(`未获取到 ${coin.toUpperCase()} 的 ${getSpotCandleIntervalLabel(interval)} K 线数据`)
+    }
+    setCachedSpotCandles(source, coin, interval, candles)
+    return candles
+}
+
+export const summarizeSpotCandles = (candles: SpotCandle[]): SpotCandleSummary | null => {
+    const normalized = normalizeSpotCandles(candles)
+    if (normalized.length === 0) {
+        return null
+    }
+
+    const first = normalized[0]
+    const last = normalized[normalized.length - 1]
+    const high = Math.max(...normalized.map((item) => item.high))
+    const low = Math.min(...normalized.map((item) => item.low))
+    const volume = normalized.reduce((sum, item) => sum + item.volume, 0)
+    const quoteVolume = normalized.reduce((sum, item) => sum + item.quoteVolume, 0)
+    const averageClose = normalized.reduce((sum, item) => sum + item.close, 0) / normalized.length
+    const changePercentage = first.open > 0
+        ? ((last.close - first.open) / first.open) * 100
+        : 0
+    const amplitudePercentage = low > 0
+        ? ((high - low) / low) * 100
+        : 0
+
+    return {
+        open: first.open,
+        close: last.close,
+        high,
+        low,
+        volume,
+        quoteVolume,
+        changePercentage,
+        amplitudePercentage,
+        averageClose
+    }
 }
