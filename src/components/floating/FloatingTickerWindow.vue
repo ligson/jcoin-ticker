@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import {computed, nextTick, onMounted, ref, watch} from "vue";
+import {computed, nextTick, onBeforeUnmount, onMounted, ref, watch} from "vue";
 import {fetchSpotCandles, marketDataSourceLabelMap} from "../home/spotMarketDataSources.ts";
 import {fetchMarketSentimentHistory, resolveMarketSentimentAccent} from "../home/marketSentiment.ts";
-import type {MarketDataSource} from "../config/config.ts";
+import store from "../../config/store.ts";
+import {defaultFloatingWindowConfig, normalizeAppConfig, type FloatingWindowConfig, type MarketDataSource} from "../config/config.ts";
 import {
   ensureSpotTickerRuntime,
   runtimeCoinPrices,
@@ -16,6 +17,7 @@ const sparklineSource = ref<MarketDataSource | null>(null)
 const sentimentScore = ref<number | null>(null)
 const sentimentClassification = ref('暂无')
 const sentimentUpdatedAt = ref<number | null>(null)
+const floatingWindowOpacity = ref(defaultFloatingWindowConfig.opacity)
 let sparklineRequestToken = 0
 
 const FLOATING_SPARKLINE_POINT_COUNT = 24
@@ -32,6 +34,7 @@ interface SparklineShape {
 const sourceLabel = computed(() => marketDataSourceLabelMap[runtimeMarketDataSource.value])
 const runtimeSignature = computed(() => `${runtimeMarketDataSource.value}::${runtimeCoins.value.join(',')}`)
 const sentimentAccent = computed(() => resolveMarketSentimentAccent(sentimentScore.value ?? 50))
+const isSolidPanel = computed(() => floatingWindowOpacity.value >= 100)
 const preferredWindowHeight = computed(() => {
   if (coinPrices.value.length === 0) {
     return 190
@@ -215,6 +218,24 @@ async function loadMarketSentiment() {
   }
 }
 
+async function loadFloatingWindowConfig() {
+  try {
+    const appConfig = await store.get("appConfig")
+    floatingWindowOpacity.value = normalizeAppConfig(appConfig).floatingWindow.opacity
+  } catch {
+    floatingWindowOpacity.value = defaultFloatingWindowConfig.opacity
+  }
+}
+
+function handleFloatingWindowConfigUpdated(_event: unknown, floatingWindowConfig?: FloatingWindowConfig) {
+  if (!floatingWindowConfig) {
+    return
+  }
+  floatingWindowOpacity.value = Number.isFinite(floatingWindowConfig.opacity)
+      ? Math.max(45, Math.min(100, Math.round(floatingWindowConfig.opacity)))
+      : defaultFloatingWindowConfig.opacity
+}
+
 watch(runtimeSignature, async () => {
   await loadSparklineSeries(runtimeCoins.value, runtimeMarketDataSource.value)
 }, {
@@ -230,12 +251,18 @@ watch(() => runtimeCoins.value.length, () => {
 onMounted(() => {
   void ensureSpotTickerRuntime()
   void loadMarketSentiment()
+  void loadFloatingWindowConfig()
   void syncFloatingWindowSize()
+  window.ipcRenderer.on('floating-window-config-updated', handleFloatingWindowConfigUpdated)
+})
+
+onBeforeUnmount(() => {
+  window.ipcRenderer.off('floating-window-config-updated', handleFloatingWindowConfigUpdated)
 })
 </script>
 
 <template>
-  <div class="floating-ticker-window">
+  <div class="floating-ticker-window" :class="{'floating-ticker-window--solid': isSolidPanel}">
     <section class="floating-ticker-window__panel">
       <div class="floating-ticker-window__drag-bar">
         <span class="floating-ticker-window__drag-dot"></span>
@@ -319,15 +346,22 @@ onMounted(() => {
   flex-direction: column;
   gap: 8px;
   padding: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.16);
   border-radius: 22px;
   background:
       radial-gradient(circle at top left, rgba(14, 165, 233, 0.16), transparent 28%),
       radial-gradient(circle at bottom right, rgba(16, 185, 129, 0.14), transparent 30%),
       linear-gradient(180deg, rgba(15, 23, 42, 0.64), rgba(15, 23, 42, 0.46));
-  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.2);
+  box-shadow: 0 0 18px rgba(15, 23, 42, 0.16);
   backdrop-filter: blur(22px);
   overflow: hidden;
+}
+
+.floating-ticker-window--solid .floating-ticker-window__panel {
+  background:
+      radial-gradient(circle at top left, rgba(14, 165, 233, 0.18), transparent 28%),
+      radial-gradient(circle at bottom right, rgba(16, 185, 129, 0.16), transparent 30%),
+      linear-gradient(180deg, rgb(15, 23, 42), rgb(17, 24, 39));
+  backdrop-filter: none;
 }
 
 .floating-ticker-window__drag-bar {
@@ -353,7 +387,7 @@ onMounted(() => {
   gap: 12px;
   padding: 8px 10px;
   border-radius: 16px;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .floating-ticker-window__sentiment small {
@@ -411,9 +445,8 @@ onMounted(() => {
 .floating-ticker-window__item {
   position: relative;
   min-height: 60px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 16px;
-  background: rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, 0.045);
   overflow: hidden;
 }
 
@@ -484,7 +517,7 @@ onMounted(() => {
   justify-content: center;
   min-height: 72px;
   border-radius: 16px;
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.045);
   color: rgba(226, 232, 240, 0.8);
   font-size: 12px;
 }

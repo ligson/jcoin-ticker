@@ -1,32 +1,54 @@
 <script setup lang="ts">
 import {onMounted, onUnmounted} from "vue";
+import {useRouter} from "vue-router";
 import Menu from "./Menu.vue";
 import FloatingTickerWindow from "./components/floating/FloatingTickerWindow.vue";
 
 const isFloatingWindow = new URLSearchParams(window.location.search).get('window') === 'floating'
+const initialRoute = new URLSearchParams(window.location.search).get('route')
+const router = useRouter()
 
-onMounted(() => {
-  if (!isFloatingWindow) {
+function handleAppRouteOpen(_event: unknown, routePath?: string) {
+  if (isFloatingWindow || !routePath) {
     return
   }
 
-  document.documentElement.classList.add('is-floating-window')
-  document.body.classList.add('is-floating-window')
-  document.documentElement.style.background = 'transparent'
-  document.body.style.background = 'transparent'
-  document.body.style.overflow = 'hidden'
+  if (router.currentRoute.value.fullPath === routePath) {
+    return
+  }
+
+  void router.push(routePath).catch(() => {
+    // 忽略重复导航，避免托盘连续点击时产生无意义报错。
+  })
+}
+
+onMounted(() => {
+  if (isFloatingWindow) {
+    document.documentElement.classList.add('is-floating-window')
+    document.body.classList.add('is-floating-window')
+    document.documentElement.style.background = 'transparent'
+    document.body.style.background = 'transparent'
+    document.body.style.overflow = 'hidden'
+    return
+  }
+
+  window.ipcRenderer.on('app-route-open', handleAppRouteOpen)
+  if (initialRoute) {
+    handleAppRouteOpen(undefined, initialRoute)
+  }
 })
 
 onUnmounted(() => {
-  if (!isFloatingWindow) {
+  if (isFloatingWindow) {
+    document.documentElement.classList.remove('is-floating-window')
+    document.body.classList.remove('is-floating-window')
+    document.documentElement.style.background = ''
+    document.body.style.background = ''
+    document.body.style.overflow = ''
     return
   }
 
-  document.documentElement.classList.remove('is-floating-window')
-  document.body.classList.remove('is-floating-window')
-  document.documentElement.style.background = ''
-  document.body.style.background = ''
-  document.body.style.overflow = ''
+  window.ipcRenderer.off('app-route-open', handleAppRouteOpen)
 })
 </script>
 

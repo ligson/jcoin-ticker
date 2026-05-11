@@ -1,4 +1,4 @@
-import {app, BrowserWindow, ipcMain, net, screen, session, shell} from 'electron'
+import {app, BrowserWindow, ipcMain, Menu as ElectronMenu, nativeImage, net, screen, session, shell, Tray} from 'electron'
 import {fileURLToPath} from 'node:url'
 import path from 'node:path'
 import Store from 'electron-store'
@@ -22,6 +22,9 @@ const BINANCE_HOSTS = new Set([
 ])
 const SUPPORTED_MARKET_DATA_HOSTS = new Set([
     ...BINANCE_HOSTS,
+    'api.bybit.com',
+    'api.bitget.com',
+    'api.kucoin.com',
     'ws.okx.com',
     'ws.kraken.com',
     'ws-feed.exchange.coinbase.com'
@@ -50,7 +53,9 @@ process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL ? path.join(process.env.APP_ROOT, 
 
 let win: BrowserWindow | null
 let floatingWin: BrowserWindow | null = null
+let tray: Tray | null = null
 let refreshingTickerSymbolCachePromise: Promise<TickerSymbolCache> | null = null
+let isAppQuitting = false
 
 interface TickerSymbolOption {
     value: string;
@@ -274,7 +279,7 @@ async function fetchLatestGitHubRelease() {
 
 function getFloatingWindowOpacity(floatingWindowConfig?: FloatingWindowConfig) {
     const config = floatingWindowConfig ?? getAppConfig().floatingWindow
-    return Math.min(0.96, Math.max(0.45, config.opacity / 100))
+    return Math.min(1, Math.max(0.45, config.opacity / 100))
 }
 
 function getStoredFloatingWindowBounds(): FloatingWindowBounds {
@@ -540,7 +545,127 @@ async function loadRendererWindow(window: BrowserWindow, search?: string) {
     await window.loadFile(path.join(RENDERER_DIST, 'index.html'))
 }
 
-async function createMainWindow() {
+function getTrayAssetPath(fileName: string) {
+    return path.join(process.env.VITE_PUBLIC, fileName)
+}
+
+function loadTrayImage(fileNames: string[]) {
+    for (const fileName of fileNames) {
+        const trayImage = nativeImage.createFromPath(getTrayAssetPath(fileName))
+        if (!trayImage.isEmpty()) {
+            return trayImage
+        }
+    }
+    return null
+}
+
+function buildTrayImage() {
+    if (process.platform === 'darwin') {
+        const trayImage = loadTrayImage(['trayTemplate.png'])
+        if (!trayImage) {
+            return {
+                image: null,
+                fallbackTitle: 'JC'
+            }
+        }
+        trayImage.setTemplateImage(true)
+        return {
+            image: trayImage,
+            fallbackTitle: ''
+        }
+    }
+
+    if (process.platform === 'win32') {
+        const trayImage = loadTrayImage(['tray-win.png', 'btc.png'])
+        return {
+            image: trayImage?.resize({width: 20, height: 20}) ?? null,
+            fallbackTitle: ''
+        }
+    }
+
+    const trayImage = loadTrayImage(['tray-linux.png', 'btc.png'])
+    return {
+        image: trayImage?.resize({width: 22, height: 22}) ?? null,
+        fallbackTitle: ''
+    }
+}
+
+function buildTrayMenu() {
+    return ElectronMenu.buildFromTemplate([
+        {
+            label: '显示主页',
+            click: () => {
+                void showMainWindow('/home')
+            }
+        },
+        {
+            label: '打开设置',
+            click: () => {
+                void showMainWindow('/setting/ticker-coin')
+            }
+        },
+        {
+            type: 'separator'
+        },
+        {
+            label: '退出应用',
+            click: () => {
+                isAppQuitting = true
+                app.quit()
+            }
+        }
+    ])
+}
+
+function createTray() {
+    if (tray) {
+        tray.setContextMenu(buildTrayMenu())
+        return tray
+    }
+
+    const {image, fallbackTitle} = buildTrayImage()
+    if (!image) {
+        console.error('[托盘] 系统托盘图标加载失败')
+        return null
+    }
+
+    try {
+        tray = new Tray(image)
+        tray.setToolTip('jcoin-ticker')
+        if (process.platform === 'darwin') {
+            tray.setTitle(fallbackTitle)
+        }
+        tray.setContextMenu(buildTrayMenu())
+        tray.on('click', () => {
+            void showMainWindow('/home')
+        })
+        tray.on('double-click', () => {
+            void showMainWindow('/home')
+        })
+        return tray
+    } catch (error) {
+        console.error('[托盘] 系统托盘创建失败:', error)
+        return null
+    }
+}
+
+async function showMainWindow(routePath = '/home') {
+    if (!win || win.isDestroyed()) {
+        await createMainWindow(routePath)
+        return
+    }
+
+    if (win.isMinimized()) {
+        win.restore()
+    }
+    if (!win.isVisible()) {
+        win.show()
+    }
+    win.focus()
+    win.webContents.send('app-route-open', routePath)
+}
+
+async function createMainWindow(initialRoute?: string) {
     await applyProxyConfig(getAppConfig().proxy)
 
     win = new BrowserWindow({
@@ -549,6 +674,14 @@ async function createMainWindow() {
         webPreferences: {
             preload: path.join(__dirname, 'preload.mjs'),
         },
+    })
+
+    win.on('close', (event) => {
+        if (isAppQuitting || !tray) {
+            return
+        }
+        event.preventDefault()
+        win?.hide()
     })
 
     win.on('closed', () => {
@@ -561,9 +694,13 @@ async function createMainWindow() {
 
     win.webContents.on('did-finish-load', () => {
         win?.webContents.send('main-process-message', (new Date).toLocaleString())
+        if (initialRoute) {
+            win?.webContents.send('app-route-open', initialRoute)
+        }
     })
 
-    await loadRendererWindow(win)
+    const search = initialRoute ? new URLSearchParams({route: initialRoute}).toString() : undefined
+    await loadRendererWindow(win, search)
 }
 
 async function createFloatingWindow(floatingWindowConfig?: FloatingWindowConfig) {
@@ -584,7 +721,7 @@ async function createFloatingWindow(floatingWindowConfig?: FloatingWindowConfig)
         alwaysOnTop: true,
         frame: false,
         transparent: true,
-        hasShadow: true,
+        hasShadow: false,
         resizable: false,
         skipTaskbar: true,
         backgroundColor: '#00000000',
@@ -632,24 +769,40 @@ async function syncFloatingWindowWithConfig(floatingWindowConfig?: FloatingWindo
 
     const window = await createFloatingWindow(config)
     window.setOpacity(getFloatingWindowOpacity(config))
+    window.webContents.send('floating-window-config-updated', config)
     window.showInactive()
     window.setAlwaysOnTop(true, 'screen-saver')
 }
 
-// 最后一个窗口关闭后直接退出应用，避免开发时进程残留。
+// 真正退出应用时再收尾窗口；有托盘时主窗口关闭会缩到托盘，无托盘时直接退出。
 app.on('window-all-closed', () => {
-    app.quit()
-    win = null
-    floatingWin = null
+    if (isAppQuitting || !tray) {
+        app.quit()
+        win = null
+        floatingWin = null
+    }
+})
+
+app.on('before-quit', () => {
+    isAppQuitting = true
 })
 
 app.on('activate', () => {
+    if (win && !win.isDestroyed()) {
+        void showMainWindow('/home')
+        return
+    }
     if (BrowserWindow.getAllWindows().length === 0) {
         void createMainWindow()
     }
 })
 
 app.whenReady().then(() => {
+    const trayInstance = createTray()
+    if (process.platform === 'darwin' && trayInstance) {
+        app.dock?.hide()
+        app.setActivationPolicy('accessory')
+    }
     void createMainWindow()
     void syncFloatingWindowWithConfig()
 })

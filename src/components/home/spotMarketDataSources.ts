@@ -50,6 +50,7 @@ export interface SpotTickerClient {
 }
 
 const RECONNECT_INTERVAL = 5000
+const REST_POLL_INTERVAL = 5000
 const BINANCE_SPOT_WS_PREFIX = 'wss://data-stream.binance.vision/stream?streams='
 const BINANCE_SPOT_REST_URL = 'https://data-api.binance.vision/api/v3'
 const OKX_SPOT_WS_URL = 'wss://ws.okx.com:8443/ws/v5/public'
@@ -58,6 +59,10 @@ const KRAKEN_SPOT_WS_URL = 'wss://ws.kraken.com/v2'
 const KRAKEN_SPOT_REST_URL = 'https://api.kraken.com/0/public'
 const COINBASE_SPOT_WS_URL = 'wss://ws-feed.exchange.coinbase.com'
 const COINBASE_SPOT_REST_URL = 'https://api.exchange.coinbase.com'
+const BYBIT_SPOT_REST_URL = 'https://api.bybit.com/v5/market'
+const BITGET_SPOT_REST_URL = 'https://api.bitget.com/api/v2/spot'
+const KUCOIN_SPOT_REST_URL = 'https://api.kucoin.com/api/v1'
+const KUCOIN_SPOT_REST_V2_URL = 'https://api.kucoin.com/api/v2'
 const SPOT_CANDLE_CACHE_TTL_MS = 2 * 60 * 1000
 const SPOT_CANDLE_TARGET_COUNTS: Record<SpotCandleInterval, number> = {
     '15m': 96,
@@ -108,6 +113,18 @@ export const marketDataSourceOptions = [
     {
         label: 'Coinbase 现货',
         value: 'coinbase_spot' as MarketDataSource
+    },
+    {
+        label: 'Bybit 现货',
+        value: 'bybit_spot' as MarketDataSource
+    },
+    {
+        label: 'Bitget 现货',
+        value: 'bitget_spot' as MarketDataSource
+    },
+    {
+        label: 'KuCoin 现货',
+        value: 'kucoin_spot' as MarketDataSource
     }
 ]
 
@@ -115,7 +132,10 @@ export const marketDataSourceLabelMap: Record<MarketDataSource, string> = {
     binance_spot: 'Binance 现货',
     okx_spot: 'OKX 现货',
     kraken_spot: 'Kraken 现货',
-    coinbase_spot: 'Coinbase 现货'
+    coinbase_spot: 'Coinbase 现货',
+    bybit_spot: 'Bybit 现货',
+    bitget_spot: 'Bitget 现货',
+    kucoin_spot: 'KuCoin 现货'
 }
 
 class BinanceSpotTickerClient implements SpotTickerClient {
@@ -480,6 +500,58 @@ class CoinbaseSpotTickerClient implements SpotTickerClient {
     }
 }
 
+class RestPollingSpotTickerClient implements SpotTickerClient {
+    private messageCallback: ((coinPrice: CoinPrice) => void) | null = null
+    private pollTimer: ReturnType<typeof setTimeout> | null = null
+    private closed = false
+    private started = false
+
+    constructor(private readonly fetcher: () => Promise<CoinPrice[]>) {}
+
+    setMessageCallback(callback: (coinPrice: CoinPrice) => void) {
+        this.messageCallback = callback
+        if (!this.started) {
+            this.started = true
+            this.connect()
+        }
+    }
+
+    private connect() {
+        if (this.closed) {
+            return
+        }
+
+        const executePoll = async () => {
+            if (this.closed) {
+                return
+            }
+
+            try {
+                const prices = await this.fetcher()
+                prices.forEach((item) => {
+                    this.messageCallback?.(item)
+                })
+            } finally {
+                if (!this.closed) {
+                    this.pollTimer = setTimeout(() => {
+                        void executePoll()
+                    }, REST_POLL_INTERVAL)
+                }
+            }
+        }
+
+        void executePoll()
+    }
+
+    close() {
+        this.closed = true
+        if (this.pollTimer) {
+            clearTimeout(this.pollTimer)
+            this.pollTimer = null
+        }
+    }
+}
+
 const buildSpotSymbolOptions = (symbols: string[], source: MarketDataSource) => {
     const optionsMap = new Map<string, TickerSymbolOption>()
 
@@ -512,6 +584,63 @@ const buildSpotSymbolOptions = (symbols: string[], source: MarketDataSource) => 
 }
 
 export const fetchSpotSymbolOptions = async (source: MarketDataSource) => {
+    if (source === 'bybit_spot') {
+        const payload = await fetchJson<{result?: {list?: Array<Record<string, any>>}}>(
+            `${BYBIT_SPOT_REST_URL}/instruments-info?category=spot&limit=1000`,
+            '获取 Bybit 现货币种列表失败'
+        )
+
+        const symbols = (Array.isArray(payload.result?.list) ? payload.result?.list : [])
+            .filter((item) => String(item.status ?? '').toLowerCase() === 'trading')
+            .filter((item) => String(item.quoteCoin ?? '').toUpperCase() === 'USDT')
+            .map((item) => String(item.symbol ?? '').toUpperCase())
+            .filter(Boolean)
+
+        const options = buildSpotSymbolOptions(symbols, source)
+        if (options.length === 0) {
+            throw new Error('Bybit 返回的现货币种列表为空')
+        }
+        return options
+    }
+
+    if (source === 'bitget_spot') {
+        const payload = await fetchJson<{data?: Array<Record<string, any>>}>(
+            `${BITGET_SPOT_REST_URL}/public/symbols`,
+            '获取 Bitget 现货币种列表失败'
+        )
+
+        const symbols = (Array.isArray(payload.data) ? payload.data : [])
+            .filter((item) => String(item.status ?? '').toLowerCase() === 'online')
+            .filter((item) => String(item.quoteCoin ?? '').toUpperCase() === 'USDT')
+            .map((item) => String(item.symbol ?? '').toUpperCase())
+            .filter(Boolean)
+
+        const options = buildSpotSymbolOptions(symbols, source)
+        if (options.length === 0) {
+            throw new Error('Bitget 返回的现货币种列表为空')
+        }
+        return options
+    }
+
+    if (source === 'kucoin_spot') {
+        const payload = await fetchJson<{data?: Array<Record<string, any>>}>(
+            `${KUCOIN_SPOT_REST_V2_URL}/symbols`,
+            '获取 KuCoin 现货币种列表失败'
+        )
+
+        const symbols = (Array.isArray(payload.data) ? payload.data : [])
+            .filter((item) => Boolean(item.enableTrading))
+            .filter((item) => String(item.quoteCurrency ?? '').toUpperCase() === 'USDT')
+            .map((item) => String(item.symbol ?? '').toUpperCase())
+            .filter(Boolean)
+
+        const options = buildSpotSymbolOptions(symbols, source)
+        if (options.length === 0) {
+            throw new Error('KuCoin 返回的现货币种列表为空')
+        }
+        return options
+    }
+
     if (source === 'kraken_spot') {
         return await new Promise<TickerSymbolOption[]>((resolve, reject) => {
             const webSocket = new WebSocket(KRAKEN_SPOT_WS_URL)
@@ -693,7 +822,108 @@ export const fetchSpotSymbolOptions = async (source: MarketDataSource) => {
     })
 }
 
+const fetchBybitSpotTickerSnapshot = async (coins: string[]) => {
+    const symbolSet = new Set(coins.map((coin) => getSpotSymbolForSource('bybit_spot', coin)))
+    const payload = await fetchJson<{result?: {list?: Array<Record<string, any>>}}>(
+        `${BYBIT_SPOT_REST_URL}/tickers?category=spot`,
+        '获取 Bybit 实时价格失败'
+    )
+
+    return (Array.isArray(payload.result?.list) ? payload.result?.list : [])
+        .filter((item) => symbolSet.has(String(item.symbol ?? '').toUpperCase()))
+        .map((item) => {
+            const symbol = String(item.symbol ?? '').toUpperCase()
+            const price = String(item.lastPrice ?? '0')
+            const open = String(item.prevPrice24h ?? price)
+            const priceChangePercentage = (toNumber(item.price24hPcnt) * 100).toFixed(2)
+            return {
+                coin: symbol.replace('USDT', ''),
+                price,
+                open,
+                high: String(item.highPrice24h ?? price),
+                low: String(item.lowPrice24h ?? price),
+                priceChangePercentage,
+                volume: String(item.volume24h ?? '0'),
+                volumeInUSDT: String(item.turnover24h ?? '0')
+            } satisfies CoinPrice
+        })
+}
+
+const fetchBitgetSpotTickerSnapshot = async (coins: string[]) => {
+    const symbolSet = new Set(coins.map((coin) => getSpotSymbolForSource('bitget_spot', coin)))
+    const payload = await fetchJson<{data?: Array<Record<string, any>>}>(
+        `${BITGET_SPOT_REST_URL}/market/tickers`,
+        '获取 Bitget 实时价格失败'
+    )
+
+    return (Array.isArray(payload.data) ? payload.data : [])
+        .filter((item) => symbolSet.has(String(item.symbol ?? '').toUpperCase()))
+        .map((item) => {
+            const symbol = String(item.symbol ?? '').toUpperCase()
+            const price = String(item.lastPr ?? item.close ?? '0')
+            const open = String(item.open ?? item.open24h ?? price)
+            const openPrice = toNumber(open)
+            const lastPrice = toNumber(price)
+            const quoteVolume = String(item.usdtVolume ?? item.quoteVolume ?? '0')
+            const computedChange = openPrice > 0
+                ? (((lastPrice - openPrice) / openPrice) * 100).toFixed(2)
+                : (toNumber(item.change24h) * 100).toFixed(2)
+
+            return {
+                coin: symbol.replace('USDT', ''),
+                price,
+                open,
+                high: String(item.high24h ?? price),
+                low: String(item.low24h ?? price),
+                priceChangePercentage: computedChange,
+                volume: String(item.baseVolume ?? item.volume ?? '0'),
+                volumeInUSDT: quoteVolume
+            } satisfies CoinPrice
+        })
+}
+
+const fetchKuCoinSpotTickerSnapshot = async (coins: string[]) => {
+    const symbolSet = new Set(coins.map((coin) => getSpotSymbolForSource('kucoin_spot', coin)))
+    const payload = await fetchJson<{data?: {ticker?: Array<Record<string, any>>}}>(
+        `${KUCOIN_SPOT_REST_URL}/market/allTickers`,
+        '获取 KuCoin 实时价格失败'
+    )
+
+    return (Array.isArray(payload.data?.ticker) ? payload.data?.ticker : [])
+        .filter((item) => symbolSet.has(String(item.symbol ?? '').toUpperCase()))
+        .map((item) => {
+            const symbol = String(item.symbol ?? '').toUpperCase()
+            const price = String(item.last ?? '0')
+            const changePrice = toNumber(item.changePrice)
+            const changeRate = toNumber(item.changeRate)
+            const openPrice = toNumber(price) - changePrice
+
+            return {
+                coin: symbol.replace('-USDT', ''),
+                price,
+                open: openPrice > 0 ? openPrice.toString() : price,
+                high: String(item.high ?? price),
+                low: String(item.low ?? price),
+                priceChangePercentage: (changeRate * 100).toFixed(2),
+                volume: String(item.vol ?? '0'),
+                volumeInUSDT: String(item.volValue ?? '0')
+            } satisfies CoinPrice
+        })
+}
+
 export const createSpotTickerClient = (source: MarketDataSource, coins: string[]) => {
+    if (source === 'kucoin_spot') {
+        return new RestPollingSpotTickerClient(async () => await fetchKuCoinSpotTickerSnapshot(coins))
+    }
+
+    if (source === 'bitget_spot') {
+        return new RestPollingSpotTickerClient(async () => await fetchBitgetSpotTickerSnapshot(coins))
+    }
+
+    if (source === 'bybit_spot') {
+        return new RestPollingSpotTickerClient(async () => await fetchBybitSpotTickerSnapshot(coins))
+    }
+
     if (source === 'coinbase_spot') {
         return new CoinbaseSpotTickerClient(coins)
     }
@@ -821,7 +1051,7 @@ const fetchJson = async <T>(url: string, errorPrefix: string): Promise<T> => {
 
 const getSpotSymbolForSource = (source: MarketDataSource, coin: string) => {
     const normalizedCoin = coin.toUpperCase()
-    if (source === 'okx_spot' || source === 'coinbase_spot') {
+    if (source === 'okx_spot' || source === 'coinbase_spot' || source === 'kucoin_spot') {
         return `${normalizedCoin}-USDT`
     }
     if (source === 'kraken_spot') {
@@ -929,6 +1159,146 @@ const fetchOkxSpotCandles = async (coin: string, interval: SpotCandleInterval) =
             quoteVolume
         )
     }), limit)
+}
+
+const fetchBybitSpotCandles = async (coin: string, interval: SpotCandleInterval) => {
+    const bybitIntervalMap: Record<SpotCandleInterval, string> = {
+        '15m': '15',
+        '1h': '60',
+        '1d': 'D',
+        '1w': 'W',
+        '1M': 'M',
+        all: 'M'
+    }
+    const limit = SPOT_CANDLE_TARGET_COUNTS[interval]
+    const symbol = getSpotSymbolForSource('bybit_spot', coin)
+    const payload = await fetchJson<{result?: {list?: Array<Array<string | number>>}}>(
+        `${BYBIT_SPOT_REST_URL}/kline?category=spot&symbol=${symbol}&interval=${bybitIntervalMap[interval]}&limit=${limit}`,
+        '获取 Bybit K 线失败'
+    )
+
+    const candles = (Array.isArray(payload.result?.list) ? payload.result?.list : []).map((item) => createSpotCandle(
+        toNumber(item[0]),
+        toNumber(item[0]) + getSpotCandleIntervalDurationMs(interval),
+        item[1],
+        item[2],
+        item[3],
+        item[4],
+        item[5],
+        item[6]
+    ))
+
+    return normalizeSpotCandles(candles, limit)
+}
+
+const fetchBitgetSpotCandles = async (coin: string, interval: SpotCandleInterval) => {
+    const bitgetIntervalMap: Record<SpotCandleInterval, string> = {
+        '15m': '15min',
+        '1h': '1h',
+        '1d': '1day',
+        '1w': '1week',
+        '1M': '1M',
+        all: '1M'
+    }
+    const limit = SPOT_CANDLE_TARGET_COUNTS[interval]
+    const symbol = getSpotSymbolForSource('bitget_spot', coin)
+    const payload = await fetchJson<{data?: Array<Array<string | number>>}>(
+        `${BITGET_SPOT_REST_URL}/market/candles?symbol=${symbol}&granularity=${bitgetIntervalMap[interval]}&limit=${limit}`,
+        '获取 Bitget K 线失败'
+    )
+
+    const candles = (Array.isArray(payload.data) ? payload.data : []).map((item) => createSpotCandle(
+        toNumber(item[0]),
+        toNumber(item[0]) + getSpotCandleIntervalDurationMs(interval),
+        item[1],
+        item[2],
+        item[3],
+        item[4],
+        item[5],
+        item[7] ?? item[6]
+    ))
+
+    return normalizeSpotCandles(candles, limit)
+}
+
+const fetchKuCoinCandlesWindow = async (
+    symbol: string,
+    type: string,
+    startAt?: number,
+    endAt?: number
+) => {
+    const search = new URLSearchParams({
+        symbol,
+        type
+    })
+    if (typeof startAt === 'number') {
+        search.set('startAt', String(startAt))
+    }
+    if (typeof endAt === 'number') {
+        search.set('endAt', String(endAt))
+    }
+
+    const payload = await fetchJson<{data?: Array<Array<string | number>>}>(
+        `${KUCOIN_SPOT_REST_URL}/market/candles?${search.toString()}`,
+        '获取 KuCoin K 线失败'
+    )
+
+    return normalizeSpotCandles((Array.isArray(payload.data) ? payload.data : []).map((item) => {
+        const openTime = toNumber(item[0]) * 1000
+        return createSpotCandle(
+            openTime,
+            openTime + getSpotCandleIntervalDurationMs(type === '15min' ? '15m' : type === '1hour' ? '1h' : '1d'),
+            item[1],
+            item[3],
+            item[4],
+            item[2],
+            item[5],
+            item[6]
+        )
+    }))
+}
+
+const fetchKuCoinDailyCandles = async (coin: string, dailyCount: number) => {
+    const symbol = getSpotSymbolForSource('kucoin_spot', coin)
+    const candles: SpotCandle[] = []
+    let currentEndAt = Math.floor(Date.now() / 1000)
+    let requestCount = 0
+
+    while (candles.length < dailyCount) {
+        requestCount += 1
+        if (requestCount > 12) {
+            break
+        }
+        const currentStartAt = currentEndAt - (1500 * 24 * 60 * 60)
+        const batch = await fetchKuCoinCandlesWindow(symbol, '1day', currentStartAt, currentEndAt)
+        if (batch.length === 0) {
+            break
+        }
+        candles.unshift(...batch)
+        currentEndAt = Math.floor(batch[0].openTime / 1000) - 24 * 60 * 60
+        if (batch.length < 1400) {
+            break
+        }
+    }
+
+    return normalizeSpotCandles(candles, dailyCount)
+}
+
+const fetchKuCoinSpotCandles = async (coin: string, interval: SpotCandleInterval) => {
+    if (interval === '1M' || interval === 'all') {
+        const dailyCandles = await fetchKuCoinDailyCandles(coin, interval === '1M' ? 450 : 9000)
+        return aggregateSpotCandles(dailyCandles, 'month', SPOT_CANDLE_TARGET_COUNTS[interval])
+    }
+
+    const typeMap: Record<'15m' | '1h' | '1d' | '1w', string> = {
+        '15m': '15min',
+        '1h': '1hour',
+        '1d': '1day',
+        '1w': '1week'
+    }
+    const symbol = getSpotSymbolForSource('kucoin_spot', coin)
+    const candles = await fetchKuCoinCandlesWindow(symbol, typeMap[interval as '15m' | '1h' | '1d' | '1w'])
+    return normalizeSpotCandles(candles, SPOT_CANDLE_TARGET_COUNTS[interval])
 }
 
 const fetchKrakenSpotCandlesByRest = async (coin: string, interval: SpotCandleInterval) => {
@@ -1167,6 +1537,18 @@ const fetchCoinbaseSpotCandles = async (coin: string, interval: SpotCandleInterv
 }
 
 const fetchSpotCandlesUncached = async (source: MarketDataSource, coin: string, interval: SpotCandleInterval) => {
+    if (source === 'kucoin_spot') {
+        return await fetchKuCoinSpotCandles(coin, interval)
+    }
+
+    if (source === 'bitget_spot') {
+        return await fetchBitgetSpotCandles(coin, interval)
+    }
+
+    if (source === 'bybit_spot') {
+        return await fetchBybitSpotCandles(coin, interval)
+    }
+
     if (source === 'coinbase_spot') {
         return await fetchCoinbaseSpotCandles(coin, interval)
     }

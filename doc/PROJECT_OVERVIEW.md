@@ -14,7 +14,8 @@
 5. 如需把重点币种常驻桌面观察，可到设置页开启透明悬浮窗，并调整适合自己的透明度。
 6. 点击首页中的某个币种，进入详情页查看该币的常见周期 K 线、全部走势与区间统计。
 7. 打开设置页，通过搜索下拉选择要监控的现货币种，或配置网络代理、切换数据源。
-8. 关闭后再次打开应用，继续使用上次保存的币种和代理配置。
+8. 主窗口点关闭后，应用会缩到系统托盘继续运行；可从托盘直接重新打开主页、进入设置或真正退出应用。
+9. 下次再次打开应用，继续使用上次保存的币种和代理配置。
 
 ## 运行结构
 
@@ -37,6 +38,7 @@
 ### Main 进程
 
 - 负责创建 Electron `BrowserWindow`。
+- 负责创建系统托盘菜单，并处理主窗口隐藏、恢复和退出应用的桌面端交互。
 - 除主窗口外，还支持创建一个透明、无边框、始终置顶的悬浮监控窗口，并持久化保存其位置和尺寸。
 - 悬浮窗的显示状态和透明度由设置页统一管理，主进程会在保存后立即同步窗口状态。
 - 通过 IPC 暴露 `electron-store` 的读写能力。
@@ -44,7 +46,7 @@
 
 ### 数据来源
 
-- 当前支持 `Binance 现货`、`OKX 现货`、`Kraken 现货`、`Coinbase 现货` 四个公开、免 API Key 的数据源。
+- 当前支持 `Binance 现货`、`OKX 现货`、`Kraken 现货`、`Coinbase 现货`、`Bybit 现货`、`Bitget 现货`、`KuCoin 现货` 七个公开、免 API Key 的数据源。
 - Binance 现货 WebSocket：
   `wss://data-stream.binance.vision/stream?streams=...`
 - OKX 现货公共 WebSocket：
@@ -53,6 +55,12 @@
   `wss://ws.kraken.com/v2`
 - Coinbase Exchange 公共 WebSocket：
   `wss://ws-feed.exchange.coinbase.com`
+- Bybit 现货公共市场 REST：
+  `https://api.bybit.com/v5/market`
+- Bitget 现货公共市场 REST：
+  `https://api.bitget.com/api/v2/spot`
+- KuCoin 现货公共市场 REST：
+  `https://api.kucoin.com/api/v1`
 - 每条行情消息都会被转换成前端统一使用的 `CoinPrice` 对象。
 - 币种选择数据来自当前数据源的公开现货接口/现货 WebSocket 快照，并在本地缓存后定期刷新。
 
@@ -75,7 +83,14 @@
     enabled: boolean
     opacity: number
   }
-  marketDataSource: 'binance_spot' | 'okx_spot' | 'kraken_spot' | 'coinbase_spot'
+  marketDataSource:
+    | 'binance_spot'
+    | 'okx_spot'
+    | 'kraken_spot'
+    | 'coinbase_spot'
+    | 'bybit_spot'
+    | 'bitget_spot'
+    | 'kucoin_spot'
 }
 ```
 
@@ -93,7 +108,8 @@
 - 首页监听的是后台运行时里的统一实时状态，收到新消息后会立即更新，不需要通过页面切换触发重渲染。
 - 首页顶部总览条会复用当前监控列表与情绪缓存，集中展示情绪、大盘和整体涨跌结构，不额外引入新的重型数据链路。
 - 首页币种卡片会复用短时缓存的 `1 小时` K 线数据生成 `24H` 小走势，并将最新实时价格映射到曲线尾部，兼顾趋势感和刷新及时性。
-- 悬浮窗默认尺寸更小，并会按关注币数量自动贴合高度，尽量在一个小窗里完整显示，不出现滚动条；关闭主窗口时会一并退出，避免残留独立后台进程。
+- 悬浮窗默认尺寸更小，并会按关注币数量自动贴合高度，尽量在一个小窗里完整显示，不出现滚动条；主窗口缩到托盘后，悬浮窗和后台盯盘都会继续保留。
+- 主窗口点击关闭后默认只隐藏到系统托盘，不直接退出；托盘菜单可直接打开主页、进入设置页或执行真正退出。
 - 币种下拉数据会优先读取当前数据源的本地缓存；只有本地没有缓存或用户手动刷新时才重新请求，并且只提供首页行情源支持的 `USDT` 现货币种。
 - 点击首页币种后会进入独立详情页；实时头部数据继续复用后台行情状态，K 线则按当前数据源单独请求并做短时缓存。
 

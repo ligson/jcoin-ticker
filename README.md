@@ -16,6 +16,7 @@
 - 首页顶部增加“市场总览”仪表盘条，集中展示市场情绪、BTC/ETH 大盘和当前监控列表的整体状态
 - 首页每个币种卡片增加 `24H` sparkline 小走势，便于快速判断短线趋势
 - 支持在设置页控制透明悬浮窗的显示与透明度，用始终置顶的小窗持续盯住关注币种
+- 新增系统托盘菜单，主窗口关闭后默认缩到托盘继续运行，可从托盘直接打开主页、设置页或真正退出应用
 - 首页增加全局市场情绪指数卡片，支持查看不同区间下的情绪曲线变化
 - 展示 24h 涨跌幅、最高价、最低价、成交量和成交额
 - 支持多个币种并按配置顺序显示
@@ -29,12 +30,13 @@
 - 支持在设置页配置代理，并让后续网络请求优先走该代理
 - 监控币种通过当前数据源的 `USDT` 现货币种列表搜索选择，并带本地缓存与定期刷新
 - 代理环境下可按需放行 Binance 证书错误，兼容部分会替换 HTTPS 证书的代理
-- 当前支持 `Binance 现货`、`OKX 现货`、`Kraken 现货`、`Coinbase 现货` 四个免 API Key 的公开数据源
+- 当前支持 `Binance 现货`、`OKX 现货`、`Kraken 现货`、`Coinbase 现货`、`Bybit 现货`、`Bitget 现货`、`KuCoin 现货` 七个免 API Key 的公开数据源
 - 全局市场情绪指数使用 Alternative.me 的公开 Fear & Greed Index 数据
 - 监控币种列表与首页实时价格统一使用同一个现货数据源，避免出现可选币种与行情源不一致
 - 监控币种页面默认优先使用本地缓存，只有首次无缓存或手动刷新时才请求远端币种列表
 - 应用后台只维护一个全局现货 WebSocket 运行时，切换页面时不会重复建连
 - 首页直接复用后台实时行情状态，收到新价格后会立即刷新，不需要靠切换页面触发更新
+- 主窗口关闭按钮默认只隐藏到系统托盘，不会中断后台盯盘；需要完全退出时请使用托盘菜单中的“退出应用”
 - 详情页支持 `15 分钟`、`1 小时`、`日线`、`周线`、`月线` 和 `全部` 视图，并展示该币当前最常看的市场摘要
 - 详情页支持查看扩展指标：可点击查看市值走势，以及基于当前 K 线周期聚合的成交量/成交额走势
 
@@ -113,6 +115,12 @@ pnpm make     # electron-forge make
   `wss://ws.kraken.com/v2`
 - Coinbase 公共 WebSocket：
   `wss://ws-feed.exchange.coinbase.com`
+- Bybit 公共市场 REST：
+  `https://api.bybit.com/v5/market`
+- Bitget 公共现货 REST：
+  `https://api.bitget.com/api/v2/spot`
+- KuCoin 公共现货 REST：
+  `https://api.kucoin.com/api/v1`
 - 每个币种会被拼成 `<coin>usdt@ticker`
 
 ## 配置存储
@@ -134,7 +142,14 @@ pnpm make     # electron-forge make
     enabled: boolean
     opacity: number
   }
-  marketDataSource: 'binance_spot' | 'okx_spot' | 'kraken_spot' | 'coinbase_spot'
+  marketDataSource:
+    | 'binance_spot'
+    | 'okx_spot'
+    | 'kraken_spot'
+    | 'coinbase_spot'
+    | 'bybit_spot'
+    | 'bitget_spot'
+    | 'kucoin_spot'
 }
 ```
 

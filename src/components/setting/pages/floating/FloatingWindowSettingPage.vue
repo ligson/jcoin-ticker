@@ -93,7 +93,7 @@ onBeforeUnmount(() => {
         <a-slider
             v-model:value="floatingWindowConfig.opacity"
             :min="45"
-            :max="96"
+            :max="100"
             :disabled="!floatingWindowConfig.enabled"
         />
         <a-typography-paragraph type="secondary" style="margin-bottom: 0">

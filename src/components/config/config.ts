@@ -1,4 +1,11 @@
-export type MarketDataSource = 'binance_spot' | 'okx_spot' | 'kraken_spot' | 'coinbase_spot'
+export type MarketDataSource =
+    | 'binance_spot'
+    | 'okx_spot'
+    | 'kraken_spot'
+    | 'coinbase_spot'
+    | 'bybit_spot'
+    | 'bitget_spot'
+    | 'kucoin_spot'
 
 export interface ProxyConfig {
     enabled: boolean;
@@ -56,12 +63,12 @@ export const normalizeAppConfig = (value: Partial<AppConfig> | null | undefined)
             bypassRules: proxy.bypassRules ?? '',
             ignoreCertificateErrors: Boolean(proxy.ignoreCertificateErrors)
         },
-        marketDataSource: ['okx_spot', 'kraken_spot', 'coinbase_spot'].includes(String(value?.marketDataSource))
+        marketDataSource: ['okx_spot', 'kraken_spot', 'coinbase_spot', 'bybit_spot', 'bitget_spot', 'kucoin_spot'].includes(String(value?.marketDataSource))
             ? value?.marketDataSource as MarketDataSource
             : 'binance_spot',
         floatingWindow: {
             enabled: Boolean(floatingWindow.enabled),
-            opacity: Number.isFinite(opacity) ? Math.min(96, Math.max(45, Math.round(opacity))) : defaultFloatingWindowConfig.opacity
+            opacity: Number.isFinite(opacity) ? Math.min(100, Math.max(45, Math.round(opacity))) : defaultFloatingWindowConfig.opacity
         }
     }
 }

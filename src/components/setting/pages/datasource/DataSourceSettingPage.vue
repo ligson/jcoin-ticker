@@ -54,7 +54,8 @@ onMounted(() => {
       </a-form-item>
 
       <a-typography-paragraph type="secondary">
-        当前支持的都是免 API Key 的公开现货数据源。切换后，首页实时价格和监控币种下拉会一起切换到同一个数据源，避免币种列表和行情来源不一致。
+        当前支持的都是免 API Key 的公开现货数据源，包含 Binance、OKX、Kraken、Coinbase、Bybit、Bitget 和 KuCoin。
+        切换后，首页实时价格和监控币种下拉会一起切换到同一个数据源，避免币种列表和行情来源不一致。
       </a-typography-paragraph>
 
       <a-button type="primary" :loading="saving" @click="saveSettings">
