@@ -15,12 +15,15 @@
 - 实时展示币种最新价格
 - 首页顶部增加“市场总览”仪表盘条，集中展示市场情绪、BTC/ETH 大盘和当前监控列表的整体状态
 - 首页每个币种卡片增加 `24H` sparkline 小走势，便于快速判断短线趋势
+- 支持在设置页控制透明悬浮窗的显示与透明度，用始终置顶的小窗持续盯住关注币种
 - 首页增加全局市场情绪指数卡片，支持查看不同区间下的情绪曲线变化
 - 展示 24h 涨跌幅、最高价、最低价、成交量和成交额
 - 支持多个币种并按配置顺序显示
 - 支持在首页通过拖拽调整币种顺序，并持久化保存到本地
 - 支持点击首页币种进入详情页，查看常见周期 K 线与区间统计
 - 详情页图表支持十字准星、hover 数值提示和周期切换过渡反馈
+- 悬浮窗支持紧凑列表显示市场情绪指数、实时价格、24H 涨跌与轻量走势背景，适合常驻桌面侧边监控
+- 关于页支持展示工具简介、当前版本、GitHub 项目主页入口，以及基于 GitHub Release 的版本更新按钮
 - WebSocket 断开后自动重连
 - 使用 `electron-store` 持久化币种列表
 - 支持在设置页配置代理，并让后续网络请求优先走该代理
@@ -127,6 +130,10 @@ pnpm make     # electron-forge make
     bypassRules: string
     ignoreCertificateErrors: boolean
   }
+  floatingWindow: {
+    enabled: boolean
+    opacity: number
+  }
   marketDataSource: 'binance_spot' | 'okx_spot' | 'kraken_spot' | 'coinbase_spot'
 }
 ```
@@ -160,5 +167,5 @@ pnpm make     # electron-forge make
 
 ## 当前已知情况
 
-- `Help` 和 `About` 页面还只是占位内容
+- `Help` 页面仍是占位内容，当前也没有在顶部导航中暴露入口
 - 仓库里暂时没有自动化测试

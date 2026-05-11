@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import {h, ref} from "vue";
-import {useRouter} from "vue-router";
-import {ApiOutlined, DollarCircleOutlined, GlobalOutlined, InfoCircleOutlined} from "@ant-design/icons-vue";
+import {computed, h, ref, watch} from "vue";
+import {useRoute, useRouter} from "vue-router";
+import {ApiOutlined, DashboardOutlined, DollarCircleOutlined, GlobalOutlined, InfoCircleOutlined} from "@ant-design/icons-vue";
 import {MenuProps} from "ant-design-vue";
 
 const activeKey = ref<string[]>(["ticker-coin"]);
@@ -24,17 +24,36 @@ const menuOptions = ref<MenuProps['items']>([
     icon: h(ApiOutlined),
   },
   {
+    label: '悬浮窗',
+    key: 'floating-window',
+    icon: h(DashboardOutlined),
+  },
+  {
     label: '关于',
     key: 'about',
     icon: h(InfoCircleOutlined),
   }
 ])
 const router = useRouter()
+const route = useRoute()
+
+const currentSettingKey = computed(() => {
+  const routeName = String(route.name ?? '')
+  return ['ticker-coin', 'proxy', 'data-source', 'floating-window', 'about'].includes(routeName)
+      ? routeName
+      : 'ticker-coin'
+})
+
 const handleMenuSelect: MenuProps['onClick'] = (e) => {
-  console.log('点击的菜单项 key:', e.key);
   activeKey.value = [e.key + ""];
   router.push(`/setting/${e.key}`)
 };
+
+watch(currentSettingKey, (value) => {
+  activeKey.value = [value]
+}, {
+  immediate: true
+})
 </script>
 
 <template>

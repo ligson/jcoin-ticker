@@ -37,6 +37,11 @@ const routes = [
                 component: () => import("../components/setting/pages/datasource/DataSourceSettingPage.vue")
             },
             {
+                path: 'floating-window',
+                name: 'floating-window',
+                component: () => import("../components/setting/pages/floating/FloatingWindowSettingPage.vue")
+            },
+            {
                 path: 'about',
                 name: 'about',
                 component: () => import("../components/setting/pages/about/AboutPage.vue")

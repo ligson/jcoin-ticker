@@ -1,32 +1,73 @@
 <script setup lang="ts">
+import {onMounted, onUnmounted} from "vue";
 import Menu from "./Menu.vue";
+import FloatingTickerWindow from "./components/floating/FloatingTickerWindow.vue";
+
+const isFloatingWindow = new URLSearchParams(window.location.search).get('window') === 'floating'
+
+onMounted(() => {
+  if (!isFloatingWindow) {
+    return
+  }
+
+  document.documentElement.classList.add('is-floating-window')
+  document.body.classList.add('is-floating-window')
+  document.documentElement.style.background = 'transparent'
+  document.body.style.background = 'transparent'
+  document.body.style.overflow = 'hidden'
+})
+
+onUnmounted(() => {
+  if (!isFloatingWindow) {
+    return
+  }
+
+  document.documentElement.classList.remove('is-floating-window')
+  document.body.classList.remove('is-floating-window')
+  document.documentElement.style.background = ''
+  document.body.style.background = ''
+  document.body.style.overflow = ''
+})
 </script>
 
 <template>
-  <a-layout style="flex: 1">
-    <a-layout-header style="display: flex;height: 50px;flex-direction: row;background: #FFFFFF">
-      <Menu style="flex: 1"/>
+  <FloatingTickerWindow v-if="isFloatingWindow" />
+
+  <a-layout v-else class="app-shell">
+    <a-layout-header class="app-shell__header">
+      <Menu class="app-shell__menu" />
     </a-layout-header>
-    <a-layout-content style="flex: 1;background: #FFFFFF">
+    <a-layout-content class="app-shell__content">
       <router-view/>
     </a-layout-content>
-    <a-layout-footer style="display: flex;height: 50px;align-items: center;justify-content: center;"><span></span></a-layout-footer>
   </a-layout>
 </template>
 
 <style scoped>
-.logo {
-  height: 6em;
-  padding: 1.5em;
-  will-change: filter;
-  transition: filter 300ms;
+.app-shell {
+  flex: 1;
+  min-height: 100vh;
+  background:
+      radial-gradient(circle at top left, rgba(251, 146, 60, 0.08), transparent 22%),
+      linear-gradient(180deg, #f8fafc 0%, #f3f6fb 100%);
 }
 
-.logo:hover {
-  filter: drop-shadow(0 0 2em #646cffaa);
+.app-shell__header {
+  height: 74px;
+  display: flex;
+  align-items: center;
+  padding: 0 18px;
+  background: rgba(255, 255, 255, 0.82);
+  border-bottom: 1px solid rgba(226, 232, 240, 0.92);
+  backdrop-filter: blur(18px);
 }
 
-.logo.vue:hover {
-  filter: drop-shadow(0 0 2em #42b883aa);
+.app-shell__menu {
+  flex: 1;
+}
+
+.app-shell__content {
+  flex: 1;
+  background: transparent;
 }
 </style>

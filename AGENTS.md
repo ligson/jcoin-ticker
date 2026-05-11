@@ -3,7 +3,7 @@
 ## 项目用途
 
 `jcoin-ticker` 是一个基于 Electron + Vue 3 的轻量桌面盯盘工具。
-当前核心用途是展示用户自定义币种列表的公开现货行情，并通过 `electron-store` 在本地保存监控币种、代理和数据源配置。
+当前核心用途是展示用户自定义币种列表的公开现货行情，并通过 `electron-store` 在本地保存监控币种、代理、数据源和悬浮窗配置。
 
 ## 开始前先读
 
@@ -26,6 +26,8 @@
 - 币种配置页：`src/components/setting/pages/tickercoin/TickerCoinPage.vue`
 - 代理设置页：`src/components/setting/pages/proxy/ProxySettingPage.vue`
 - 数据源设置页：`src/components/setting/pages/datasource/DataSourceSettingPage.vue`
+- 悬浮窗设置页：`src/components/setting/pages/floating/FloatingWindowSettingPage.vue`
+- 桌面悬浮窗：`src/components/floating/FloatingTickerWindow.vue`
 - Electron 主进程：`electron/main.ts`
 - Preload 桥接：`electron/preload.ts`
 - 持久化访问入口：`src/config/store.ts`
@@ -77,12 +79,13 @@
 - 支持增加和删除监控币种。
 - 支持切换现货数据源。
 - 支持配置网络代理。
+- 支持通过设置页控制桌面悬浮窗的显示和透明度。
 - 支持在桌面端本地持久化保存币种列表、代理和数据源配置。
 - 首页实时价格复用全局后台 WebSocket 运行时，切换页面时不会重新建连。
 - 支持以 Electron 桌面应用形式运行和打包。
 
 ## 当前已知缺口
 
-- `help` 和 `about` 页面目前仍是占位内容。
+- `help` 页面目前仍是占位内容，且当前没有在顶部导航中暴露入口。
 - 仓库当前没有自动化测试。
 - README 与项目记忆文档需要人工保持同步。
