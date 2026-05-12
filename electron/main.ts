@@ -1,6 +1,7 @@
 import {app, BrowserWindow, ipcMain, Menu as ElectronMenu, nativeImage, net, screen, session, shell, Tray} from 'electron'
 import {fileURLToPath} from 'node:url'
 import path from 'node:path'
+import {writeFile} from 'node:fs/promises'
 import Store from 'electron-store'
 import {AppConfig, FloatingWindowConfig, ProxyConfig, normalizeAppConfig} from '../src/components/config/config'
 
@@ -88,6 +89,18 @@ interface GitHubLatestReleaseResponse {
     body?: string;
     published_at?: string;
     assets?: GitHubReleaseAsset[];
+}
+
+interface AppUpdateCheckResult {
+    currentVersion: string;
+    latestVersion: string;
+    hasUpdate: boolean;
+    repositoryUrl: string;
+    releasesUrl: string;
+    releaseUrl: string;
+    downloadUrl: string;
+    assetName: string;
+    publishedAt: string;
 }
 
 // 添加 electron-store IPC 处理
@@ -186,16 +199,41 @@ ipcMain.handle('app-repository-open', async () => {
 })
 
 ipcMain.handle('app-update-check', async () => {
+    return await getAppUpdateCheckResult()
+})
+
+ipcMain.handle('app-update-download', async () => {
+    const updateInfo = await getAppUpdateCheckResult()
+
+    if (!updateInfo.hasUpdate) {
+        return {
+            ...updateInfo,
+            downloaded: false,
+            filePath: ''
+        }
+    }
+
+    if (!updateInfo.downloadUrl || !updateInfo.assetName) {
+        throw new Error('没有找到适合当前系统的安装包，请到 GitHub Release 页面手动下载')
+    }
+
+    const filePath = await downloadUpdateAsset(updateInfo.downloadUrl, updateInfo.assetName)
+    await openDownloadedUpdate(filePath)
+
+    return {
+        ...updateInfo,
+        downloaded: true,
+        filePath
+    }
+})
+
+async function getAppUpdateCheckResult(): Promise<AppUpdateCheckResult> {
     const release = await fetchLatestGitHubRelease()
     const currentVersion = normalizeVersion(app.getVersion())
     const latestVersion = normalizeVersion(String(release.tag_name ?? ''))
     const hasUpdate = compareVersions(latestVersion, currentVersion) > 0
     const downloadAsset = pickReleaseAssetForCurrentPlatform(Array.isArray(release.assets) ? release.assets : [])
-    const targetUrl = downloadAsset?.browser_download_url || release.html_url || GITHUB_RELEASES_URL
-
-    if (hasUpdate) {
-        await shell.openExternal(targetUrl)
-    }
+    const targetUrl = downloadAsset?.browser_download_url || ''
 
     return {
         currentVersion,
@@ -208,7 +246,36 @@ ipcMain.handle('app-update-check', async () => {
         assetName: downloadAsset?.name || '',
         publishedAt: release.published_at || ''
     }
-})
+}
+
+async function downloadUpdateAsset(downloadUrl: string, assetName: string) {
+    const safeAssetName = path.basename(assetName).replace(/[<>:"/\\|?*\u0000-\u001F]/g, '_')
+    if (!safeAssetName) {
+        throw new Error('更新包文件名无效')
+    }
+
+    const response = await net.fetch(downloadUrl, {
+        headers: {
+            'User-Agent': `${app.getName()}/${app.getVersion()}`
+        }
+    })
+
+    if (!response.ok) {
+        throw new Error(`下载安装包失败：${response.status}`)
+    }
+
+    const filePath = path.join(app.getPath('downloads'), safeAssetName)
+    const buffer = Buffer.from(await response.arrayBuffer())
+    await writeFile(filePath, buffer)
+    return filePath
+}
+
+async function openDownloadedUpdate(filePath: string) {
+    const openError = await shell.openPath(filePath)
+    if (openError) {
+        shell.showItemInFolder(filePath)
+    }
+}
 
 function getAppConfig(): AppConfig {
     return normalizeAppConfig(store.get('appConfig') as AppConfig | null)
@@ -551,9 +618,13 @@ function getTrayAssetPath(fileName: string) {
 
 function loadTrayImage(fileNames: string[]) {
     for (const fileName of fileNames) {
-        const trayImage = nativeImage.createFromPath(getTrayAssetPath(fileName))
+        const assetPath = getTrayAssetPath(fileName)
+        const trayImage = nativeImage.createFromPath(assetPath)
         if (!trayImage.isEmpty()) {
-            return trayImage
+            return {
+                image: trayImage,
+                assetPath
+            }
         }
     }
     return null
@@ -561,32 +632,45 @@ function loadTrayImage(fileNames: string[]) {
 
 function buildTrayImage() {
     if (process.platform === 'darwin') {
-        const trayImage = loadTrayImage(['trayTemplate.png'])
-        if (!trayImage) {
+        const trayImageResult = loadTrayImage(['trayTemplate.png'])
+        if (!trayImageResult) {
             return {
                 image: null,
-                fallbackTitle: 'JC'
+                fallbackTitle: 'JC',
+                assetPath: ''
             }
+        }
+        const trayImage = trayImageResult.image
+        const retinaAssetPath = getTrayAssetPath('trayTemplate@2x.png')
+        const retinaImage = nativeImage.createFromPath(retinaAssetPath)
+        if (!retinaImage.isEmpty()) {
+            trayImage.addRepresentation({
+                scaleFactor: 2,
+                dataURL: retinaImage.toDataURL()
+            })
         }
         trayImage.setTemplateImage(true)
         return {
             image: trayImage,
-            fallbackTitle: ''
+            fallbackTitle: '',
+            assetPath: trayImageResult.assetPath
         }
     }
 
     if (process.platform === 'win32') {
-        const trayImage = loadTrayImage(['tray-win.png', 'btc.png'])
+        const trayImageResult = loadTrayImage(['tray-win.png', 'btc.png'])
         return {
-            image: trayImage?.resize({width: 20, height: 20}) ?? null,
-            fallbackTitle: ''
+            image: trayImageResult?.image.resize({width: 20, height: 20}) ?? null,
+            fallbackTitle: '',
+            assetPath: trayImageResult?.assetPath ?? ''
         }
     }
 
-    const trayImage = loadTrayImage(['tray-linux.png', 'btc.png'])
+    const trayImageResult = loadTrayImage(['tray-linux.png', 'btc.png'])
     return {
-        image: trayImage?.resize({width: 22, height: 22}) ?? null,
-        fallbackTitle: ''
+        image: trayImageResult?.image.resize({width: 22, height: 22}) ?? null,
+        fallbackTitle: '',
+        assetPath: trayImageResult?.assetPath ?? ''
     }
 }
 
@@ -623,9 +707,9 @@ function createTray() {
         return tray
     }
 
-    const {image, fallbackTitle} = buildTrayImage()
+    const {image, fallbackTitle, assetPath} = buildTrayImage()
     if (!image) {
-        console.error('[托盘] 系统托盘图标加载失败')
+        console.error(`[托盘] 系统托盘图标加载失败，资源目录：${process.env.VITE_PUBLIC}`)
         return null
     }
 
@@ -635,6 +719,7 @@ function createTray() {
         if (process.platform === 'darwin') {
             tray.setTitle(fallbackTitle)
         }
+        console.log(`[托盘] 系统托盘已创建，图标资源：${assetPath}`)
         tray.setContextMenu(buildTrayMenu())
         tray.on('click', () => {
             void showMainWindow('/home')
@@ -669,6 +754,10 @@ async function createMainWindow(initialRoute?: string) {
     await applyProxyConfig(getAppConfig().proxy)
 
     win = new BrowserWindow({
+        width: 1280,
+        height: 820,
+        minWidth: 1100,
+        minHeight: 720,
         icon: path.join(process.env.VITE_PUBLIC, 'btc.ico'),
         autoHideMenuBar: true,
         webPreferences: {

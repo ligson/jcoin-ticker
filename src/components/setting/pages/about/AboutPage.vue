@@ -21,6 +21,11 @@ interface UpdateCheckResult {
   publishedAt: string;
 }
 
+interface UpdateDownloadResult extends UpdateCheckResult {
+  downloaded: boolean;
+  filePath: string;
+}
+
 const instance = getCurrentInstance();
 const $message = instance?.appContext.config.globalProperties.$message;
 
@@ -31,7 +36,7 @@ const aboutInfo = ref<AboutInfo>({
   releasesUrl: 'https://github.com/ligson/jcoin-ticker/releases'
 })
 const checkingUpdate = ref(false)
-const latestUpdateText = ref('点击下方按钮可检查 GitHub Release 最新版本。')
+const latestUpdateText = ref('点击下方按钮可检查 GitHub Release 最新版本，并在应用内下载适合当前系统的安装包。')
 
 const loadAboutInfo = async () => {
   try {
@@ -60,16 +65,23 @@ const checkForUpdates = async () => {
       const publishedLabel = result.publishedAt
           ? new Date(result.publishedAt).toLocaleString()
           : '未知时间'
-      latestUpdateText.value = `发现新版本 v${result.latestVersion}，已为你打开 ${result.assetName || '对应安装包'} 下载地址。发布时间：${publishedLabel}`
-      $message.success(`发现新版本 v${result.latestVersion}，已开始跳转下载`)
+      latestUpdateText.value = `发现新版本 v${result.latestVersion}，正在应用内下载 ${result.assetName || '对应安装包'}。发布时间：${publishedLabel}`
+      const downloadResult = await window.ipcRenderer.invoke('app-update-download') as UpdateDownloadResult
+      if (!downloadResult.downloaded) {
+        latestUpdateText.value = `当前已经是最新版本 v${downloadResult.currentVersion}。`
+        $message.success(`当前已经是最新版本 v${downloadResult.currentVersion}`)
+        return
+      }
+      latestUpdateText.value = `新版本 v${downloadResult.latestVersion} 下载完成，安装包已保存到：${downloadResult.filePath}`
+      $message.success(`新版本 v${downloadResult.latestVersion} 下载完成，已打开安装包`)
       return
     }
 
     latestUpdateText.value = `当前已经是最新版本 v${result.currentVersion}。`
     $message.success(`当前已经是最新版本 v${result.currentVersion}`)
   } catch (e: any) {
-    latestUpdateText.value = '检查更新失败，你仍然可以通过 GitHub 项目主页手动查看 Release。'
-    $message.error(e?.message ?? '检查更新失败')
+    latestUpdateText.value = '检查或下载更新失败，你仍然可以通过 GitHub 项目主页手动查看 Release。'
+    $message.error(e?.message ?? '检查或下载更新失败')
   } finally {
     checkingUpdate.value = false
   }
@@ -128,13 +140,13 @@ onMounted(() => {
     <a-card title="版本更新" :bordered="false">
       <a-space direction="vertical" style="width: 100%">
         <a-typography-paragraph type="secondary" style="margin-bottom: 0">
-          点击按钮后，程序会去 GitHub Release 检查最新版本，并自动匹配当前系统的安装包；如果发现新版本，会直接为你打开对应下载地址。
+          点击按钮后，程序会去 GitHub Release 检查最新版本，并自动匹配当前系统的安装包；如果发现新版本，会在应用内下载到系统“下载”目录，并在完成后打开安装包。
         </a-typography-paragraph>
         <a-button type="primary" :loading="checkingUpdate" @click="checkForUpdates">
           <template #icon>
             <CloudDownloadOutlined />
           </template>
-          更新版本
+          检查并下载更新
         </a-button>
         <a-typography-paragraph type="secondary" style="margin-bottom: 0">
           {{ latestUpdateText }}

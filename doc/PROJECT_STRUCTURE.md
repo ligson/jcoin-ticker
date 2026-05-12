@@ -40,7 +40,7 @@ Renderer 源码目录。
 - `components/floating/FloatingTickerWindow.vue`：桌面悬浮盯盘窗口，展示紧凑版关注列表、涨跌幅和轻量走势背景。
 - `components/setting/`：设置页壳与各个设置子页面。
 - `components/setting/pages/floating/FloatingWindowSettingPage.vue`：悬浮窗设置页，负责显示开关与透明度设置。
-- `components/setting/pages/about/AboutPage.vue`：关于页，展示工具简介、版本、GitHub 项目入口和更新按钮。
+- `components/setting/pages/about/AboutPage.vue`：关于页，展示工具简介、版本、GitHub 项目入口和应用内更新包下载按钮。
 - `components/help/`：帮助页，占位状态。
 - `components/config/`：共享配置结构与默认配置。
 
@@ -48,7 +48,7 @@ Renderer 源码目录。
 
 Electron 进程代码。
 
-- `main.ts`：窗口创建、IPC 处理、应用生命周期管理，包括主窗口与受设置页控制的透明悬浮窗。
+- `main.ts`：窗口创建、IPC 处理、应用生命周期管理，包括主窗口、受设置页控制的透明悬浮窗，以及 GitHub Release 更新包检查和下载。
 - `preload.ts`：向 Renderer 安全暴露 IPC 和 `storeAPI`。
 - `main.ts` 当前主要负责代理应用、证书校验策略和本地存储 IPC。
 
