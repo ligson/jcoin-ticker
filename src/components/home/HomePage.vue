@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import {computed, getCurrentInstance, ref, watch} from "vue";
+import {computed, getCurrentInstance, onMounted, ref, watch} from "vue";
 import {useRouter} from "vue-router";
 import {AppstoreOutlined, HolderOutlined, LineChartOutlined} from "@ant-design/icons-vue";
 import HomeMarketOverviewBar from "./HomeMarketOverviewBar.vue";
@@ -28,6 +28,8 @@ const sparklineSeriesMap = ref<Record<string, number[]>>({})
 const sparklineLoadingMap = ref<Record<string, boolean>>({})
 const sparklineSource = ref<MarketDataSource | null>(null)
 const activeHomeView = ref<'watch' | 'sentiment'>('watch')
+const homeInitializing = ref(true)
+const homeInitError = ref('')
 let sparklineRequestToken = 0
 
 const HOME_SPARKLINE_POINT_COUNT = 24
@@ -404,19 +406,53 @@ const sparklineShapeMap = computed<Record<string, SparklineShape | null>>(() => 
   ) as Record<string, SparklineShape | null>
 })
 
+const initializeHomeRuntime = async () => {
+  homeInitializing.value = true
+  homeInitError.value = ''
+
+  try {
+    await ensureSpotTickerRuntime()
+  } catch (error: any) {
+    homeInitError.value = error instanceof Error ? error.message : String(error)
+  } finally {
+    homeInitializing.value = false
+  }
+}
+
 watch(sparklineSignature, async () => {
   await loadSparklineSeries(runtimeCoins.value, runtimeMarketDataSource.value)
 }, {
   immediate: true
 })
 
-void ensureSpotTickerRuntime()
+onMounted(() => {
+  void initializeHomeRuntime()
+})
 
 </script>
 
 <template>
   <div class="home-page">
-    <section class="home-terminal">
+    <div v-if="homeInitializing" class="home-page__boot">
+      <a-spin />
+      <span>正在加载本地盯盘配置...</span>
+    </div>
+
+    <a-result
+        v-else-if="homeInitError"
+        status="warning"
+        title="首页初始化失败"
+        :sub-title="homeInitError"
+        class="home-page__error"
+    >
+      <template #extra>
+        <a-button type="primary" @click="initializeHomeRuntime">
+          重新加载
+        </a-button>
+      </template>
+    </a-result>
+
+    <section v-else class="home-terminal">
       <header class="home-terminal__topbar">
         <div class="home-terminal__title-block">
           <span class="home-terminal__eyebrow">实时现货终端</span>
@@ -616,6 +652,28 @@ void ensureSpotTickerRuntime()
   box-sizing: border-box;
   overflow: hidden;
   color: #0f172a;
+}
+
+.home-page__boot,
+.home-page__error {
+  height: 100%;
+  min-height: 420px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 28px;
+  background:
+      radial-gradient(circle at 12% 0%, rgba(14, 165, 233, 0.12), transparent 24%),
+      linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(241, 245, 249, 0.9));
+}
+
+.home-page__boot {
+  flex-direction: column;
+  gap: 14px;
+  color: #64748b;
+  font-size: 14px;
+  font-weight: 700;
 }
 
 .home-terminal {

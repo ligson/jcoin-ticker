@@ -12,6 +12,24 @@
     "dist",
     "dist-electron"
   ],
+  "extraResources": [
+    {
+      "from": "public/trayTemplate.png",
+      "to": "tray/trayTemplate.png"
+    },
+    {
+      "from": "public/trayTemplate@2x.png",
+      "to": "tray/trayTemplate@2x.png"
+    },
+    {
+      "from": "public/tray-win.png",
+      "to": "tray/tray-win.png"
+    },
+    {
+      "from": "public/tray-linux.png",
+      "to": "tray/tray-linux.png"
+    }
+  ],
   "mac": {
     "target": [
       {

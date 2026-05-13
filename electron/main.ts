@@ -616,14 +616,28 @@ function getTrayAssetPath(fileName: string) {
     return path.join(process.env.VITE_PUBLIC, fileName)
 }
 
+function getTrayAssetCandidates(fileName: string) {
+    const candidates = []
+
+    if (app.isPackaged) {
+        // 打包后的 macOS 托盘图优先放在 Contents/Resources/tray，避免从 app.asar 内读取原生图片资源时显示不稳定。
+        candidates.push(path.join(process.resourcesPath, 'tray', fileName))
+    }
+
+    candidates.push(getTrayAssetPath(fileName))
+
+    return [...new Set(candidates)]
+}
+
 function loadTrayImage(fileNames: string[]) {
     for (const fileName of fileNames) {
-        const assetPath = getTrayAssetPath(fileName)
-        const trayImage = nativeImage.createFromPath(assetPath)
-        if (!trayImage.isEmpty()) {
-            return {
-                image: trayImage,
-                assetPath
+        for (const assetPath of getTrayAssetCandidates(fileName)) {
+            const trayImage = nativeImage.createFromPath(assetPath)
+            if (!trayImage.isEmpty()) {
+                return {
+                    image: trayImage,
+                    assetPath
+                }
             }
         }
     }
@@ -641,13 +655,15 @@ function buildTrayImage() {
             }
         }
         const trayImage = trayImageResult.image
-        const retinaAssetPath = getTrayAssetPath('trayTemplate@2x.png')
-        const retinaImage = nativeImage.createFromPath(retinaAssetPath)
-        if (!retinaImage.isEmpty()) {
-            trayImage.addRepresentation({
-                scaleFactor: 2,
-                dataURL: retinaImage.toDataURL()
-            })
+        for (const retinaAssetPath of getTrayAssetCandidates('trayTemplate@2x.png')) {
+            const retinaImage = nativeImage.createFromPath(retinaAssetPath)
+            if (!retinaImage.isEmpty()) {
+                trayImage.addRepresentation({
+                    scaleFactor: 2,
+                    dataURL: retinaImage.toDataURL()
+                })
+                break
+            }
         }
         trayImage.setTemplateImage(true)
         return {
