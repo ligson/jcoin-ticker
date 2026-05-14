@@ -110,6 +110,9 @@ ipcMain.handle('store-get', (_, key, defaultValue) => {
 
 ipcMain.handle('store-set', (_, key, value) => {
     store.set(key, value)
+    if (key === 'appConfig') {
+        broadcastAppConfigUpdated(value)
+    }
 })
 
 ipcMain.handle('store-delete', (_, key) => {
@@ -715,6 +718,14 @@ function buildTrayMenu() {
             }
         }
     ])
+}
+
+function broadcastAppConfigUpdated(appConfig: unknown) {
+    BrowserWindow.getAllWindows().forEach((window) => {
+        if (!window.isDestroyed()) {
+            window.webContents.send('app-config-updated', appConfig)
+        }
+    })
 }
 
 function createTray() {

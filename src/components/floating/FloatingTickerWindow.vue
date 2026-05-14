@@ -3,8 +3,9 @@ import {computed, nextTick, onBeforeUnmount, onMounted, ref, watch} from "vue";
 import {fetchSpotCandles, marketDataSourceLabelMap} from "../home/spotMarketDataSources.ts";
 import {fetchMarketSentimentHistory, resolveMarketSentimentAccent} from "../home/marketSentiment.ts";
 import store from "../../config/store.ts";
-import {defaultFloatingWindowConfig, normalizeAppConfig, type FloatingWindowConfig, type MarketDataSource} from "../config/config.ts";
+import {defaultFloatingWindowConfig, normalizeAppConfig, type AppConfig, type FloatingWindowConfig, type MarketDataSource} from "../config/config.ts";
 import {
+  applySpotTickerRuntimeConfig,
   ensureSpotTickerRuntime,
   runtimeCoinPrices,
   runtimeCoins,
@@ -236,6 +237,13 @@ function handleFloatingWindowConfigUpdated(_event: unknown, floatingWindowConfig
       : defaultFloatingWindowConfig.opacity
 }
 
+async function handleAppConfigUpdated(_event: unknown, appConfig?: AppConfig) {
+  const normalizedConfig = normalizeAppConfig(appConfig)
+  floatingWindowOpacity.value = normalizedConfig.floatingWindow.opacity
+  await applySpotTickerRuntimeConfig(normalizedConfig)
+  await syncFloatingWindowSize()
+}
+
 watch(runtimeSignature, async () => {
   await loadSparklineSeries(runtimeCoins.value, runtimeMarketDataSource.value)
 }, {
@@ -254,10 +262,12 @@ onMounted(() => {
   void loadFloatingWindowConfig()
   void syncFloatingWindowSize()
   window.ipcRenderer.on('floating-window-config-updated', handleFloatingWindowConfigUpdated)
+  window.ipcRenderer.on('app-config-updated', handleAppConfigUpdated)
 })
 
 onBeforeUnmount(() => {
   window.ipcRenderer.off('floating-window-config-updated', handleFloatingWindowConfigUpdated)
+  window.ipcRenderer.off('app-config-updated', handleAppConfigUpdated)
 })
 </script>
 
